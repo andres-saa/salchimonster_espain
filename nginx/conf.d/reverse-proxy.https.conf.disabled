@@ -60,43 +60,14 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name api.socket.salchimonster-espain.salchimonster.es;
+    server_name api.socket.es-salchimonster.salchimonster.es;
 
-    ssl_certificate /etc/letsencrypt/live/api.socket.salchimonster-espain.salchimonster.es/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.socket.salchimonster-espain.salchimonster.es/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/api.socket.es-salchimonster.salchimonster.es/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.socket.es-salchimonster.salchimonster.es/privkey.pem;
     include /etc/nginx/conf.d/ssl_params.conf;
 
     location / {
         proxy_pass http://api_socket:80;
         include /etc/nginx/proxy_params.conf;
-    }
-}
-
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name salchimonster.es;
-
-    ssl_certificate /etc/letsencrypt/live/salchimonster.es/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/salchimonster.es/privkey.pem;
-    include /etc/nginx/conf.d/ssl_params.conf;
-
-    location / {
-        proxy_pass http://front_es:3000;
-        include /etc/nginx/proxy_params.conf;
-    }
-}
-
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name www.salchimonster.es;
-
-    ssl_certificate /etc/letsencrypt/live/www.salchimonster.es/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/www.salchimonster.es/privkey.pem;
-    include /etc/nginx/conf.d/ssl_params.conf;
-
-    location / {
-        return 301 https://salchimonster.es$request_uri;
     }
 }

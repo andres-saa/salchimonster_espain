@@ -1,7 +1,7 @@
 {
-  "project": "salchimonster_espain",
-  "domain": "salchimonster.com",
-  "email": "andrew19f@gmail.com",
+  "project": "es_salchimonster",
+  "domain": "salchimonster.es",
+  "email": "arrechea.saa.a@gmail.com",
   "staging": false,
   "use_pg": false,
   "use_mongo": false,
