@@ -1,0 +1,13 @@
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+        font-family: 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+}
+
+
+:root{
+    --primary-color:#ff6200;
+    --seconday-color:rgba(11, 131, 65)
+}
