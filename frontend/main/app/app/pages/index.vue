@@ -433,7 +433,7 @@ async function loadStatuses() {
 function goToStore(store: Store, mode: 'delivery' | 'pickup' | 'default') {
   if (typeof window === 'undefined') return
   const protocol = window.location.protocol || 'http:'
-  let url = `${protocol}//${store.subdomain}.localhost:3000` // Cambiar localhost por tu dominio real en producción
+  let url = `${protocol}//${store.subdomain}.salchimonster.es` // Cambiar localhost por tu dominio real en producción
 
   const params = new URLSearchParams()
 
