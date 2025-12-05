@@ -4,24 +4,27 @@
       <Icon name="mdi:arrow-left" size="24" />
     </button>
 
-    <div v-if="loading" class="loading-state">
-      <Icon name="mdi:loading" class="spin-icon" size="40" />
-      <p>Cargando producto...</p>
+    <div v-if="loading" class="loading-overlay">
+      <div class="spinner-container">
+        <Icon name="mdi:loading" class="spin-icon" size="60" />
+        <p class="loading-text">Cargando detalles del producto...</p>
+      </div>
     </div>
 
-    <div v-else-if="currentProduct" class="product-container">
+    <div v-else-if="currentProduct" class="product-container animate-fade-in">
       
       <div class="gallery-column">
         <div class="image-wrapper">
           <NuxtImg 
+            :key="fullImageUrl"
             :src="fullImageUrl" 
             :alt="displayName" 
             class="main-image"
             format="webp"
-            quality="85"
+            quality="95"
             fit="cover"
             sizes="100vw lg:600px"
-            preload
+            placeholder
           />
           
           <div class="desktop-nav-controls">
@@ -73,6 +76,7 @@
                   fit="cover"
                   format="webp"
                   loading="lazy"
+                  placeholder
                 />
               </div>
               <div class="base-item-info">
@@ -185,6 +189,7 @@
               height="150"
               format="webp"
               loading="lazy"
+              placeholder
             />
             <span>{{ option.producto_descripcion }}</span>
           </button>
@@ -211,8 +216,11 @@ const { showToast } = useToast()
 const pe_id = 38 
 
 // 1. DATA FETCHING 
+// La variable 'loading' será true mientras se realiza esta petición
 const { data: rawCategoriesData, pending: loading } = useFetch(() => `${URI}/tiendas/${pe_id}/products`, {
-  key: 'menu-data'
+  key: 'menu-data',
+  // Opcional: lazy: true si prefieres que la navegación ocurra antes de que terminen los datos, 
+  // pero tu enfoque actual con el spinner global es bueno.
 })
 
 // 2. LOGICA DEL PRODUCTO ACTUAL
@@ -451,7 +459,6 @@ useHead({
 
 <style scoped>
 /* --- VARIABLES --- */
-/* Asegúrate de tener estas variables en tu CSS global o definirlas aquí */
 /* :root {
   --bg-page: #f9fafb;
   --text-main: #1f2937;
@@ -468,9 +475,63 @@ useHead({
   padding-bottom: 90px;
   font-family: 'Roboto', sans-serif;
   color: var(--text-main, #1f2937);
+  position: relative;
 }
 
-/* --- NAVEGACIÓN FLOTANTE --- */
+/* --- ESTADOS DE CARGA --- */
+
+/* 1. Spinner Global de Datos */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-page, #f9fafb);
+  z-index: 40; /* Por debajo del botón de volver pero encima del contenido */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  color: var(--primary, #dc2626);
+}
+.loading-text {
+  font-size: 1.1rem;
+  color: var(--text-light, #6b7280);
+  font-weight: 500;
+}
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Animación de entrada para el contenido cuando los datos están listos */
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 2. Transición de Imagen Progresiva (Nuxt Image) */
+/* Cuando Nuxt Image usa 'placeholder', coloca un span con la imagen borrosa 
+   y luego la imagen real encima. Controlamos la opacidad para la transición.
+*/
+.image-wrapper :deep(img) {
+  opacity: 0; /* Empieza invisible mientras se carga */
+  transition: opacity 0.5s ease-in-out;
+}
+/* Nuxt añade esta clase (o similar según config) cuando la imagen HD se carga */
+.image-wrapper :deep(img[src*=_ipx]) {
+   opacity: 1;
+}
+
+
+/* --- RESTO DE ESTILOS (Igual que antes) --- */
+
 .nav-btn {
   position: fixed;
   z-index: 50;
@@ -490,7 +551,6 @@ useHead({
 .nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
 .nav-btn--back { top: 1rem; left: 1rem; }
 
-/* --- LAYOUT GENERAL --- */
 .product-container {
   display: grid;
   grid-template-columns: 1fr;
@@ -507,20 +567,21 @@ useHead({
   }
 }
 
-/* --- COLUMNA IZQUIERDA: IMAGEN --- */
-.gallery-column {
-  width: 100%;
-}
+/* COLUMNA IZQUIERDA: IMAGEN */
+.gallery-column { width: 100%; }
+
 .image-wrapper {
   position: relative;
-  background: white;
+  background: #f3f4f6; /* Fondo gris mientras carga el placeholder */
   width: 100%;
+  aspect-ratio: 4/4;
+  border-radius: 20px;
+  overflow: hidden;
 }
-
-/* Ajuste NuxtImg */
+/* La clase se aplica al componente NuxtImg */
 .main-image {
   width: 100%;
-  aspect-ratio: 4/4; 
+  height: 100%;
   object-fit: cover;
   display: block;
 }
@@ -529,11 +590,7 @@ useHead({
   .image-wrapper {
     position: sticky;
     top: 40px;
-    border-radius: 20px;
-    overflow: hidden;
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-  }
-  .main-image {
     aspect-ratio: 1/1;
   }
 }
@@ -551,6 +608,7 @@ useHead({
     transform: translateY(-50%);
     padding: 0 10px;
     pointer-events: none;
+    z-index: 10;
   }
   .nav-arrow {
     pointer-events: auto;
@@ -570,7 +628,7 @@ useHead({
   .nav-arrow:hover { transform: scale(1.1); background: white; }
 }
 
-/* --- COLUMNA DERECHA: DETALLES --- */
+/* COLUMNA DERECHA: DETALLES */
 .details-column {
   padding: 20px;
   background: white;
@@ -619,10 +677,8 @@ useHead({
   margin: 1.5rem 0;
 }
 
-/* --- SECCIONES (INCLUYE / MODIFICADORES) --- */
-.section-block {
-  margin-bottom: 2rem;
-}
+/* SECCIONES */
+.section-block { margin-bottom: 2rem; }
 .section-title {
   font-size: 1rem;
   font-weight: 700;
@@ -645,7 +701,7 @@ useHead({
   font-weight: 600;
 }
 
-/* Tarjetas de Producto Base */
+/* Base Products */
 .base-products-grid {
   display: grid;
   gap: 10px;
@@ -661,23 +717,17 @@ useHead({
   background: white;
 }
 .base-item-img {
-  width: 50px;
-  height: 50px;
+  width: 50px; height: 50px;
   border-radius: 8px;
   overflow: hidden; 
   flex-shrink: 0;
 }
-/* Al usar NuxtImg a veces el img pierde el display block por defecto */
 .base-item-img img {
-  width: 100%;
-  height: 100%;
+  width: 100%; height: 100%;
   object-fit: cover;
   display: block; 
 }
-
-.base-item-info {
-  flex: 1;
-}
+.base-item-info { flex: 1; }
 .base-qty-badge {
   font-size: 0.75rem;
   font-weight: bold;
@@ -687,32 +737,20 @@ useHead({
   display: inline-block;
   margin-bottom: 2px;
 }
-.base-name {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
+.base-name { display: block; font-size: 0.9rem; font-weight: 500; }
 .btn-change-base {
-  background: black;
-  color: white;
-  border: none;
-  font-size: 0.75rem;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-weight: 600;
-  cursor: pointer;
+  background: black; color: white;
+  border: none; font-size: 0.75rem;
+  padding: 6px 12px; border-radius: 20px;
+  font-weight: 600; cursor: pointer;
 }
 
-/* Lista de Modificadores */
+/* Modifiers */
 .modifiers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: flex; flex-direction: column; gap: 12px;
 }
 .modifier-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   padding: 12px;
   border: 1px solid var(--border, #e5e7eb);
   border-radius: 12px;
@@ -720,228 +758,135 @@ useHead({
   cursor: pointer;
   transition: all 0.2s ease;
 }
-.modifier-row:hover {
-  border-color: #ccc;
-}
+.modifier-row:hover { border-color: #ccc; }
 .modifier-row.is-selected {
   border-color: var(--primary, #dc2626);
   background-color: #fff5f5;
 }
-
 .custom-check {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #ccc;
-  border-radius: 4px;
-  position: relative;
-  transition: all 0.2s;
+  width: 20px; height: 20px;
+  border: 2px solid #ccc; border-radius: 4px;
+  position: relative; transition: all 0.2s;
 }
-.custom-check.type-radio {
-  border-radius: 50%;
-}
+.custom-check.type-radio { border-radius: 50%; }
 .custom-check.checked {
   background-color: var(--primary, #dc2626);
   border-color: var(--primary, #dc2626);
 }
 .custom-check.checked::after {
-  content: '';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 8px; height: 8px;
-  background: white;
+  content: ''; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 8px; height: 8px; background: white;
   border-radius: 1px;
 }
-.custom-check.type-radio.checked::after {
-  border-radius: 50%;
-}
-
+.custom-check.type-radio.checked::after { border-radius: 50%; }
 .modifier-info {
-  flex: 1;
-  display: flex;
+  flex: 1; display: flex;
   justify-content: space-between;
-  align-items: center;
-  font-size: 0.95rem;
+  align-items: center; font-size: 0.95rem;
 }
 .modifier-price {
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-weight: 600; font-size: 0.9rem;
   color: var(--text-light, #6b7280);
 }
-
 .modifier-qty-control {
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
   background: white;
   border: 1px solid var(--border, #e5e7eb);
-  border-radius: 8px;
-  overflow: hidden;
+  border-radius: 8px; overflow: hidden;
 }
 .qty-btn-mini {
-  background: #f9fafb;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
-  font-weight: bold;
+  background: #f9fafb; border: none;
+  padding: 5px 10px; cursor: pointer; font-weight: bold;
 }
 .qty-val-mini {
-  padding: 0 5px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  padding: 0 5px; font-size: 0.85rem; font-weight: 600;
 }
 
-/* --- FOOTER FIJO --- */
+/* Footer Fijo */
 .sticky-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  background: white;
+  position: fixed; bottom: 0; left: 0;
+  width: 100%; background: white;
   padding: 15px 20px;
   box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
   z-index: 100;
 }
 .footer-inner {
-  max-width: 600px;
-  margin: 0 auto;
-  display: flex;
-  gap: 15px;
+  max-width: 600px; margin: 0 auto;
+  display: flex; gap: 15px;
 }
-
 .main-qty-control {
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 5px;
-  background: white;
+  padding: 5px; background: white;
 }
 .qty-btn-main {
-  width: 40px;
-  height: 100%;
-  border: none;
-  background: transparent;
-  font-size: 1.2rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
+  width: 40px; height: 100%;
+  border: none; background: transparent;
+  font-size: 1.2rem; cursor: pointer;
+  display: flex; align-items: center;
   justify-content: center;
   color: var(--text-main, #1f2937);
 }
 .qty-val-main {
-  width: 30px;
-  text-align: center;
-  font-weight: 700;
-  font-size: 1.1rem;
+  width: 30px; text-align: center;
+  font-weight: 700; font-size: 1.1rem;
 }
-
 .add-cart-btn {
-  flex: 1;
-  background: var(--primary, #dc2626);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 12px;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.2s;
+  flex: 1; background: var(--primary, #dc2626);
+  color: white; border: none;
+  border-radius: 12px; padding: 12px;
+  font-size: 1rem; font-weight: 700;
+  cursor: pointer; transition: background 0.2s;
 }
-.add-cart-btn:hover {
-  background: var(--primary-dark, #b91c1c);
-}
+.add-cart-btn:hover { background: var(--primary-dark, #b91c1c); }
 .btn-content {
-  display: flex;
-  justify-content: space-between;
+  display: flex; justify-content: space-between;
   align-items: center;
 }
 
-/* --- MODAL CAMBIO BASE --- */
+/* Modal */
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
   justify-content: center;
-  z-index: 200;
-  padding: 20px;
+  z-index: 200; padding: 20px;
 }
 .modal-card {
-  background: white;
-  border-radius: 16px;
-  width: 100%;
-  max-width: 400px;
+  background: white; border-radius: 16px;
+  width: 100%; max-width: 400px;
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(0,0,0,0.2);
 }
 .modal-header {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding: 15px; border-bottom: 1px solid #eee;
+  display: flex; justify-content: space-between; align-items: center;
 }
 .modal-header h3 { margin: 0; font-size: 1rem; }
 .close-modal-btn {
-  background: #f3f4f6;
-  border: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-weight: bold;
+  background: #f3f4f6; border: none;
+  width: 30px; height: 30px;
+  border-radius: 50%; cursor: pointer; font-weight: bold;
 }
 .modal-body {
-  padding: 15px;
-  max-height: 60vh;
-  overflow-y: auto;
+  padding: 15px; max-height: 60vh; overflow-y: auto;
 }
 .grid-options {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;
 }
 .option-card {
-  border: 1px solid #eee;
-  background: white;
-  padding: 10px;
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  transition: transform 0.1s;
+  border: 1px solid #eee; background: white;
+  padding: 10px; border-radius: 10px;
+  cursor: pointer; display: flex;
+  flex-direction: column; align-items: center;
+  text-align: center; transition: transform 0.1s;
 }
 .option-card:hover { transform: scale(1.03); border-color: #ccc; }
-
-/* Ajuste imagen modal NuxtImg */
 .option-card img {
-  width: 80px !important; 
-  height: 80px !important;
-  object-fit: contain;
-  margin-bottom: 8px;
-  display: block;
+  width: 80px !important; height: 80px !important;
+  object-fit: contain; margin-bottom: 8px; display: block;
 }
-.option-card span {
-  font-size: 0.85rem;
-  line-height: 1.2;
-}
-
-/* Utilidades */
-.loading-state {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-light, #6b7280);
-  gap: 10px;
-}
-.spin-icon {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin { 100% { transform: rotate(360deg); } }
-
+.option-card span { font-size: 0.85rem; line-height: 1.2; }
 </style>
