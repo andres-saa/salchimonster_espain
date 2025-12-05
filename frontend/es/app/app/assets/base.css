@@ -11,3 +11,13 @@
     --primary-color:#ff6200;
     --seconday-color:rgba(11, 131, 65)
 }
+
+:root {
+  --primary:#ff6200; /* Rojo marca (ajústalo) */
+  --primary-dark:#cf4f00;
+  --text-main: #1f2937;
+  --text-light: #6b7280;
+  --bg-page: #f9fafb;
+  --bg-card: #ffffff;
+  --border: #e5e7eb;
+}

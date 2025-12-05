@@ -36,12 +36,13 @@
 
       <main
         class="app-layout__content"
+        
         :class="{ 'app-layout__content--full': isCartaRoute }"
       >
         <!-- 🔥 Transición Nuxt entre páginas -->
-         
-          <slot />
         
+          <slot  />
+       
       </main>
     </div>
   </div>

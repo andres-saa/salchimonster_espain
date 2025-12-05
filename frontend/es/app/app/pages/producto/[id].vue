@@ -1,0 +1,926 @@
+<template>
+  <div class="page-wrapper">
+    <button class="nav-btn nav-btn--back" @click="goBack" aria-label="Volver">
+      <Icon name="mdi:arrow-left" size="24" />
+    </button>
+
+    <div v-if="loading" class="loading-state">
+      <Icon name="mdi:loading" class="spin-icon" size="40" />
+      <p>Cargando producto...</p>
+    </div>
+
+    <div v-else-if="currentProduct" class="product-container">
+      
+      <div class="gallery-column">
+        <div class="image-wrapper">
+          <img 
+            :src="fullImageUrl" 
+            :alt="displayName" 
+            class="main-image"
+          />
+          <div class="desktop-nav-controls">
+            <button @click="goToPrev" class="nav-arrow" title="Anterior">
+              <Icon name="mdi:chevron-left" size="30" />
+            </button>
+            <button @click="goToNext" class="nav-arrow" title="Siguiente">
+              <Icon name="mdi:chevron-right" size="30" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="details-column">
+        
+        <header class="product-header">
+          <h1 class="product-title">{{ displayName }}</h1>
+          
+          <div class="price-block">
+            <span v-if="showOriginalPrice" class="price-old">
+              {{ formatoPesosColombianos(basePrice) }}
+            </span>
+            <span class="price-current">
+              {{ formatoPesosColombianos(finalPrice) }}
+            </span>
+          </div>
+
+          <p class="product-description">
+            {{ productDescription }}
+          </p>
+        </header>
+
+        <hr class="divider" />
+
+        <section v-if="(currentProduct.lista_productobase || []).length > 0" class="section-block">
+          <h3 class="section-title">INCLUYE</h3>
+          <div class="base-products-grid">
+            <div 
+              v-for="base in currentProduct.lista_productobase" 
+              :key="base.producto_id" 
+              class="base-item-card"
+            >
+              <div class="base-item-img">
+                <img :src="`https://img.restpe.com/${base.producto_urlimagen}`" alt="foto" />
+              </div>
+              <div class="base-item-info">
+                <div class="base-qty-badge">{{ Math.round(base.productocombo_cantidad) }}x</div>
+                <span class="base-name">{{ base.producto_descripcion }}</span>
+              </div>
+              <button 
+                v-if="base.lista_productoCambio?.length > 0"
+                class="btn-change-base"
+                @click="changeProductBase(base)"
+              >
+                Cambiar
+              </button>
+            </div>
+          </div>
+          <hr class="divider" />
+        </section>
+
+        <section 
+          v-for="group in currentProduct.lista_agrupadores || []" 
+          :key="group.modificador_id" 
+          class="section-block"
+        >
+          <div class="group-header">
+            <h3 class="section-title">{{ group.modificador_nombre }}</h3>
+            <span class="group-requirements">
+              {{ getGroupRequirementText(group) }}
+            </span>
+          </div>
+
+          <div class="modifiers-list">
+            <div 
+              v-for="mod in group.listaModificadores || []" 
+              :key="mod.modificadorseleccion_id"
+              class="modifier-row"
+              :class="{ 'is-selected': isSelected(mod, group.modificador_id) }"
+              @click="handleRowClick(mod, group.modificador_id)"
+            >
+              <div class="modifier-input-wrapper">
+                <div 
+                  class="custom-check" 
+                  :class="{ 
+                    'type-radio': Number(group.modificador_esmultiple) === 0,
+                    'checked': isSelected(mod, group.modificador_id)
+                  }"
+                ></div>
+              </div>
+
+              <div class="modifier-info">
+                <span class="modifier-name">{{ mod.modificadorseleccion_nombre }}</span>
+                <span v-if="Number(mod.modificadorseleccion_precio) > 0" class="modifier-price">
+                  +{{ formatoPesosColombianos(Number(mod.modificadorseleccion_precio)) }}
+                </span>
+              </div>
+
+              <div 
+                v-if="Number(group.modificador_esmultiple) === 1 && checkedAddition[mod.modificadorseleccion_id]" 
+                class="modifier-qty-control"
+                @click.stop
+              >
+                <button class="qty-btn-mini" @click="decrement(mod, group.modificador_id)">−</button>
+                <span class="qty-val-mini">{{ selectedAdditions[mod.modificadorseleccion_id]?.modificadorseleccion_cantidad || 1 }}</span>
+                <button class="qty-btn-mini" @click="increment(mod, group.modificador_id)">+</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="bottom-spacer"></div>
+      </div>
+    </div>
+
+    <footer class="sticky-footer" v-if="currentProduct">
+      <div class="footer-inner">
+        <div class="main-qty-control">
+          <button class="qty-btn-main" @click="quantity > 1 ? quantity-- : null" :disabled="quantity <= 1">
+             <Icon name="mdi:minus" />
+          </button>
+          <span class="qty-val-main">{{ quantity }}</span>
+          <button class="qty-btn-main" @click="quantity++">
+             <Icon name="mdi:plus" />
+          </button>
+        </div>
+
+        <button class="add-cart-btn" @click="addToCart">
+          <div class="btn-content">
+            <span>Agregar</span>
+            <span class="btn-total">{{ formatoPesosColombianos(calculateTotal()) }}</span>
+          </div>
+        </button>
+      </div>
+    </footer>
+
+    <div v-if="showChangeDialog" class="modal-backdrop" @click.self="showChangeDialog = false">
+      <div class="modal-card">
+        <header class="modal-header">
+          <h3>Cambiar {{ productBaseToChange?.producto_descripcion }}</h3>
+          <button class="close-modal-btn" @click="showChangeDialog = false">✕</button>
+        </header>
+        <div class="modal-body grid-options">
+          <button 
+            v-for="option in productBaseToChange?.lista_productoCambio || []" 
+            :key="option.producto_id"
+            class="option-card"
+            @click="selectAlternative(option)"
+          >
+            <img :src="`https://img.restpe.com/${option.producto_urlimagen}`" />
+            <span>{{ option.producto_descripcion }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
+import { usecartStore, useFetch, useHead } from '#imports'
+import { useToast } from '@/composables/useToast'
+import { URI } from '~/service/conection'
+
+const route = useRoute()
+const router = useRouter()
+const store = usecartStore()
+const { showToast } = useToast()
+
+const pe_id = 38 // ID tienda
+
+// 1. DATA FETCHING (Igual que en el snippet 1)
+const { data: rawCategoriesData, pending: loading } = useFetch(() => `${URI}/tiendas/${pe_id}/products`, {
+  key: 'menu-data'
+})
+
+// 2. LOGICA DEL PRODUCTO ACTUAL
+const currentProductId = computed(() => Number(route.params.id))
+
+const flatProducts = computed(() => {
+  const raw = rawCategoriesData.value
+  if (!raw || !raw.categorias) return []
+  const list = []
+  raw.categorias.forEach(cat => {
+    if(cat.visible && cat.products) {
+      cat.products.forEach(prod => {
+        list.push({ ...prod, categoryName: cat.categoria_descripcion })
+      })
+    }
+  })
+  return list
+})
+
+const currentProduct = computed(() => {
+  return flatProducts.value.find(p => Number(p.producto_id) === currentProductId.value) || null
+})
+
+// 3. ESTADO Y LÓGICA DE NEGOCIO (Igual que en snippet 2)
+const quantity = ref(1)
+const selectedAdditions = ref({})
+const checkedAddition = ref({})
+const exclusive = ref({})
+const productBaseToChange = ref(null)
+const showChangeDialog = ref(false)
+
+// Computed Props
+const basePrice = computed(() => {
+  if(!currentProduct.value) return 0
+  const p = currentProduct.value
+  // Prioridad: Precio presentación > Precio general > Precio simple
+  return Number(p.lista_presentacion?.[0]?.producto_precio || p.productogeneral_precio || p.price || 0)
+})
+
+const discountAmount = computed(() => Number(currentProduct.value?.discount_amount || 0))
+const finalPrice = computed(() => basePrice.value - discountAmount.value)
+const showOriginalPrice = computed(() => discountAmount.value > 0)
+
+const displayName = computed(() => currentProduct.value?.productogeneral_descripcion || currentProduct.value?.product_name || '')
+const productDescription = computed(() => currentProduct.value?.productogeneral_descripcionadicional || currentProduct.value?.productogeneral_descripcionweb || 'Sin descripción detallada.')
+
+const fullImageUrl = computed(() => {
+  const p = currentProduct.value
+  if (!p) return ''
+  if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
+  if (p.image_url) return p.image_url
+  return '/placeholder.png' // Imagen por defecto
+})
+
+const groupLimits = computed(() => {
+  const p = currentProduct.value
+  if (!p || !Array.isArray(p.lista_agrupadores)) return {}
+  const limits = {}
+  p.lista_agrupadores.forEach((g) => {
+    const key = String(g.modificador_id)
+    limits[key] = {
+      min: Number(g.modificador_cantidadminima ?? 0),
+      multiple: Number(g.modificador_esmultiple ?? 0) === 1,
+      max: g.listaModificadores?.reduce((acc, m) => acc + Number(m.productogeneralmodificador_cantidadmaxima || 0), 0) || 0
+    }
+  })
+  return limits
+})
+
+// Helpers
+const getGroupRequirementText = (group) => {
+  const limits = groupLimits.value[String(group.modificador_id)]
+  if (!limits) return ''
+  if (limits.min > 0 && limits.max > 0) return `Elige ${limits.min} (Máx ${limits.max})`
+  if (limits.min > 0) return `Elige al menos ${limits.min}`
+  return 'Opcional'
+}
+
+const isSelected = (mod, groupId) => {
+  // Verifica si está en selectedAdditions
+  return !!selectedAdditions.value[mod.modificadorseleccion_id]
+}
+
+const groupCount = (groupId) => {
+  const idStr = String(groupId)
+  return Object.values(selectedAdditions.value).reduce((acc, it) => String(it.modificador_id) === idStr ? acc + Number(it.modificadorseleccion_cantidad || 0) : acc, 0)
+}
+
+const calculateTotal = () => {
+  let total = finalPrice.value * quantity.value
+  
+  // Sumar modificadores
+  Object.values(selectedAdditions.value).forEach(item => {
+    total += Number(item.modificadorseleccion_precio || 0) * Number(item.modificadorseleccion_cantidad || 1) * quantity.value
+  })
+  
+  return total
+}
+
+// Lógica de Modificadores (Click en la fila)
+const handleRowClick = (mod, groupId) => {
+  const limits = groupLimits.value[String(groupId)]
+  
+  // Si es radio button (no multiple)
+  if (!limits.multiple) {
+    handleAdditionChange(mod, groupId)
+    return
+  }
+  
+  // Si es checkbox (click togglea)
+  const isChecked = checkedAddition.value[mod.modificadorseleccion_id]
+  checkedAddition.value[mod.modificadorseleccion_id] = !isChecked
+  handleAdditionChange(mod, groupId)
+}
+
+const handleAdditionChange = (item, groupId) => {
+  const key = String(groupId)
+  const limits = groupLimits.value[key]
+  
+  if (!limits.multiple) {
+    // Radio logic
+    Object.keys(selectedAdditions.value).forEach((k) => {
+      if (selectedAdditions.value[k].modificador_id === groupId) delete selectedAdditions.value[k]
+    })
+    exclusive.value[groupId] = item.modificadorseleccion_id
+    selectedAdditions.value[item.modificadorseleccion_id] = { ...item, modificadorseleccion_cantidad: 1, modificador_id: groupId }
+  } else {
+    // Checkbox logic
+    if (checkedAddition.value[item.modificadorseleccion_id]) {
+      // Activar
+      if (limits.max > 0 && groupCount(key) + 1 > limits.max) {
+        checkedAddition.value[item.modificadorseleccion_id] = false
+        showToast({ title: 'Límite alcanzado', message: `Máximo ${limits.max} opciones`, severity: 'warn' })
+        return
+      }
+      selectedAdditions.value[item.modificadorseleccion_id] = { ...item, modificadorseleccion_cantidad: 1, modificador_id: groupId }
+    } else {
+      // Desactivar
+      delete selectedAdditions.value[item.modificadorseleccion_id]
+      if (limits.min > 0 && groupCount(key) < limits.min) {
+        // Revertir si rompe mínimo (opcional, a veces se permite desmarcar y validar al final)
+         // showToast({ title: 'Mínimo requerido', message: `Mínimo ${limits.min}`, severity: 'warn' })
+      }
+    }
+  }
+}
+
+const increment = (item, groupId) => {
+  const key = String(groupId)
+  const limits = groupLimits.value[key]
+  if (limits.max > 0 && groupCount(key) + 1 > limits.max) {
+    showToast({ title: 'Límite', message: 'Máximo alcanzado', severity: 'warn' })
+    return
+  }
+  selectedAdditions.value[item.modificadorseleccion_id].modificadorseleccion_cantidad++
+}
+
+const decrement = (item, groupId) => {
+  const entry = selectedAdditions.value[item.modificadorseleccion_id]
+  if (entry.modificadorseleccion_cantidad > 1) {
+    entry.modificadorseleccion_cantidad--
+  } else {
+    // Remover item
+    checkedAddition.value[item.modificadorseleccion_id] = false
+    delete selectedAdditions.value[item.modificadorseleccion_id]
+  }
+}
+
+// 4. LÓGICA DE PRODUCTO BASE (CHANGE)
+const changeProductBase = (base) => {
+  productBaseToChange.value = base
+  showChangeDialog.value = true
+}
+
+const selectAlternative = (option) => {
+  const current = productBaseToChange.value
+  const backup = {
+    producto_id: current.producto_id,
+    producto_descripcion: current.producto_descripcion,
+    producto_precio: current.producto_precio,
+    producto_urlimagen: current.producto_urlimagen,
+    producto_cambio_id: current.producto_id
+  }
+  
+  // Intercambio en la lista local
+  const list = current.lista_productoCambio || []
+  const idx = list.findIndex(i => i.producto_id === option.producto_id)
+  if (idx !== -1) list.splice(idx, 1, backup)
+  else list.push(backup)
+
+  // Actualizar el objeto actual
+  Object.assign(current, {
+    producto_id: option.producto_id,
+    producto_descripcion: option.producto_descripcion,
+    producto_precio: option.producto_precio,
+    producto_urlimagen: option.producto_urlimagen
+  })
+  
+  showChangeDialog.value = false
+}
+
+// 5. VALIDACIÓN Y ADD TO CART
+const validateMinMaximums = () => {
+  for (const [gId, lim] of Object.entries(groupLimits.value)) {
+    if (groupCount(gId) < lim.min) return false
+  }
+  return true
+}
+
+const addToCart = () => {
+  if (!validateMinMaximums()) {
+    showToast({ title: 'Faltan opciones', message: 'Por favor completa las opciones obligatorias.', severity: 'error' })
+    return
+  }
+
+  store.addProductToCart(currentProduct.value, quantity.value, Object.values(selectedAdditions.value))
+  showToast({ title: 'Agregado', message: 'Producto agregado al carrito', severity: 'success' })
+  router.push('/')
+}
+
+// 6. NAVEGACIÓN
+const goBack = () => router.push('/')
+
+const goToRelative = (step) => {
+  const list = flatProducts.value
+  const idx = list.findIndex(p => Number(p.producto_id) === currentProductId.value)
+  if (idx === -1) return
+  const nextIdx = (idx + step + list.length) % list.length
+  router.replace(`/producto/${list[nextIdx].producto_id}`)
+}
+const goToNext = () => goToRelative(1)
+const goToPrev = () => goToRelative(-1)
+
+// Reset state on change
+watch(currentProduct, (newVal) => {
+  if(newVal) {
+    quantity.value = 1
+    selectedAdditions.value = {}
+    checkedAddition.value = {}
+    exclusive.value = {}
+    
+    // Auto-select minimums (Opcional, lógica simplificada aquí)
+    newVal.lista_agrupadores?.forEach(g => {
+        const lim = groupLimits.value[String(g.modificador_id)]
+        if(lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
+            // Seleccionar el primero por defecto si es obligatorio y único
+            handleAdditionChange(g.listaModificadores[0], g.modificador_id)
+        }
+    })
+  }
+}, { immediate: true })
+
+useHead({
+  title: computed(() => currentProduct.value ? `${displayName.value} - Menú` : 'Cargando...')
+})
+</script>
+
+<style scoped>
+/* --- VARIABLES --- */
+
+
+.page-wrapper {
+  background-color: var(--bg-page);
+  min-height: 100vh;
+  padding-bottom: 90px; /* Espacio para el footer */
+  font-family: 'Roboto', sans-serif;
+  color: var(--text-main);
+}
+
+/* --- NAVEGACIÓN FLOTANTE --- */
+.nav-btn {
+  position: fixed;
+  z-index: 50;
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-main);
+}
+.nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
+.nav-btn--back { top: 1rem; left: 1rem; }
+
+/* --- LAYOUT GENERAL --- */
+.product-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1024px) {
+  .product-container {
+    grid-template-columns: 1fr 1fr; /* Mitad y mitad */
+    gap: 40px;
+    padding: 40px;
+    align-items: start;
+  }
+}
+
+/* --- COLUMNA IZQUIERDA: IMAGEN --- */
+.gallery-column {
+  width: 100%;
+}
+.image-wrapper {
+  position: relative;
+  background: white;
+  width: 100%;
+}
+.main-image {
+  width: 100%;
+  aspect-ratio: 4/4; /* O 1/1 según prefieras */
+  object-fit: cover;
+  display: block;
+}
+
+/* En Desktop la imagen se fija al hacer scroll */
+@media (min-width: 1024px) {
+  .image-wrapper {
+    position: sticky;
+    top: 40px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+  }
+  .main-image {
+    aspect-ratio: 1/1;
+  }
+}
+
+.desktop-nav-controls {
+  display: none; /* Oculto en móvil */
+}
+@media (min-width: 1024px) {
+  .desktop-nav-controls {
+    display: flex;
+    justify-content: space-between;
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    transform: translateY(-50%);
+    padding: 0 10px;
+    pointer-events: none; /* Para que clicks pasen si no es botón */
+  }
+  .nav-arrow {
+    pointer-events: auto;
+    background: rgba(255,255,255,0.8);
+    backdrop-filter: blur(4px);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+  }
+  .nav-arrow:hover { transform: scale(1.1); background: white; }
+}
+
+/* --- COLUMNA DERECHA: DETALLES --- */
+.details-column {
+  padding: 20px;
+  background: white;
+}
+@media (min-width: 1024px) {
+  .details-column {
+    padding: 1rem;
+    background: transparent;
+  }
+}
+
+.product-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+
+.price-block {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.price-current {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.price-old {
+  font-size: 1rem;
+  text-decoration: line-through;
+  color: var(--text-light);
+}
+
+.product-description {
+  color: var(--text-light);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+/* --- SECCIONES (INCLUYE / MODIFICADORES) --- */
+.section-block {
+  margin-bottom: 2rem;
+}
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.group-requirements {
+  font-size: 0.75rem;
+  background: #eee;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #555;
+  font-weight: 600;
+}
+
+/* Tarjetas de Producto Base */
+.base-products-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.base-item-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+}
+.base-item-img img {
+  width: 50px;
+  height: 50px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.base-item-info {
+  flex: 1;
+}
+.base-qty-badge {
+  font-size: 0.75rem;
+  font-weight: bold;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 2px;
+}
+.base-name {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.btn-change-base {
+  background: black;
+  color: white;
+  border: none;
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Lista de Modificadores */
+.modifiers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modifier-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.modifier-row:hover {
+  border-color: #ccc;
+}
+.modifier-row.is-selected {
+  border-color: var(--primary);
+  background-color: #fff5f5; /* Tinte rojo muy suave */
+}
+
+/* Custom Checkbox/Radio CSS only */
+.custom-check {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ccc;
+  border-radius: 4px; /* Checkbox */
+  position: relative;
+  transition: all 0.2s;
+}
+.custom-check.type-radio {
+  border-radius: 50%; /* Radio */
+}
+.custom-check.checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+.custom-check.checked::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px; height: 8px;
+  background: white;
+  border-radius: 1px; /* Para check */
+}
+.custom-check.type-radio.checked::after {
+  border-radius: 50%;
+}
+
+.modifier-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+}
+.modifier-price {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.modifier-qty-control {
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.qty-btn-mini {
+  background: #f9fafb;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.qty-val-mini {
+  padding: 0 5px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* --- FOOTER FIJO --- */
+.sticky-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: white;
+  padding: 15px 20px;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+  z-index: 100;
+}
+.footer-inner {
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  gap: 15px;
+}
+
+.main-qty-control {
+  display: flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 5px;
+  background: white;
+}
+.qty-btn-main {
+  width: 40px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+}
+.qty-val-main {
+  width: 30px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.add-cart-btn {
+  flex: 1;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.add-cart-btn:hover {
+  background: var(--primary-dark);
+}
+.btn-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --- MODAL CAMBIO BASE --- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+.modal-card {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+}
+.modal-header {
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h3 { margin: 0; font-size: 1rem; }
+.close-modal-btn {
+  background: #f3f4f6;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: bold;
+}
+.modal-body {
+  padding: 15px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.grid-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+.option-card {
+  border: 1px solid #eee;
+  background: white;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.1s;
+}
+.option-card:hover { transform: scale(1.03); border-color: #ccc; }
+.option-card img {
+  width: 80px; height: 80px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+.option-card span {
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+/* Utilidades */
+.loading-state {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-light);
+  gap: 10px;
+}
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+</style>
