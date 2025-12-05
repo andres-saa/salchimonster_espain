@@ -14,12 +14,10 @@ const props = defineProps({
     type: String,
     required: true
   },
-  // callback del padre para registrar el ref y usar los observers
   setProductRef: {
     type: Function,
     required: true
   },
-  // idioma opcional, por defecto ES. Si luego quieres puedes pasarlo desde arriba.
   lang: {
     type: String,
     default: 'es'
@@ -33,13 +31,9 @@ const rootEl = ref(null)
 // === Utils ===
 const normalizeSpaces = (str) =>
   String(str || '')
-    // 1) Comas: sin espacios antes y uno después
     .replace(/\s*,\s*/g, ', ')
-    // 2) '+' con espacios cuando está entre letras/números
     .replace(/([\p{L}\p{N}])\+([\p{L}\p{N}])/gu, '$1 + $2')
-    // 3) Colapsar espacios múltiples
     .replace(/ {2,}/g, ' ')
-    // 4) Limpiar espacio antes de coma
     .replace(/ \,/g, ',')
     .trim()
 
@@ -53,23 +47,16 @@ const formatCOP = (value) =>
   }).format(Number(value || 0))
 
 // === Nombre mostrado (ES / EN) ===
-// 🔧 Corregido: ahora el título usa primero NOMBRE y no la descripción.
 const displayName = computed(() => {
   const p = props.product
-
   if (currentLang.value === 'es') {
     return normalizeSpaces(
-      // 1) Nombre principal para la carta / sistema
       p.productogeneral_descripcion ||
-      // 2) Nombre interno del producto
       p.product_name ||
-      // 3) Nombre/descripcion web como último fallback
       p.productogeneral_descripcionweb ||
       ''
     )
   }
-
-  // Inglés: nombre inglés si existe, si no el nombre interno
   return normalizeSpaces(
     p.english_name ||
     p.product_name ||
@@ -78,20 +65,15 @@ const displayName = computed(() => {
 })
 
 // === Descripción cruda (ES / EN) ===
-// 🔧 Corregido para que no vuelva a reutilizar el mismo campo del nombre como primera opción.
 const rawDescription = computed(() => {
   const p = props.product
-
   if (currentLang.value === 'es') {
     return (
-      // descripción adicional corta
       p.productogeneral_descripcionadicional ||
-      // descripción pensada para la web
       p.productogeneral_descripcionweb ||
       ''
     )
   }
-
   return (
     p.english_description ||
     p.productogeneral_descripcionweb ||
@@ -102,44 +84,22 @@ const rawDescription = computed(() => {
 const truncatedDescription = computed(() => {
   const desc = String(rawDescription.value || '')
   if (!desc) {
-    return currentLang.value === 'es'
-      ? 'Sin descripción'
-      : 'No description'
+    return currentLang.value === 'es' ? 'Sin descripción' : 'No description'
   }
   return desc.length > 100 ? desc.substring(0, 100) + '...' : desc
 })
 
 // === Precios y descuentos ===
-const discountAmount = computed(() =>
-  Number(props.product.discount_amount || 0)
-)
-const discountPercent = computed(() =>
-  Number(props.product.discount_percent || 0)
-)
-const hasDiscount = computed(
-  () => discountAmount.value > 0 && discountPercent.value > 0
-)
+const discountAmount = computed(() => Number(props.product.discount_amount || 0))
+const discountPercent = computed(() => Number(props.product.discount_percent || 0))
+const hasDiscount = computed(() => discountAmount.value > 0 && discountPercent.value > 0)
 
-// precio base:
-// 1) si tiene presentaciones -> primera presentación
-// 2) si no, productogeneral_precio
-// 3) si no, `price` mapeado
 const basePrice = computed(() => {
   const p = props.product
-
-  const presentationPrice = Number(
-    p.lista_presentacion?.[0]?.producto_precio ?? 0
-  )
-
-  if (presentationPrice > 0) {
-    return presentationPrice
-  }
-
+  const presentationPrice = Number(p.lista_presentacion?.[0]?.producto_precio ?? 0)
+  if (presentationPrice > 0) return presentationPrice
   const generalPrice = Number(p.productogeneral_precio ?? 0)
-  if (generalPrice > 0) {
-    return generalPrice
-  }
-
+  if (generalPrice > 0) return generalPrice
   return Number(p.price ?? 0)
 })
 
@@ -150,9 +110,7 @@ const finalPrice = computed(() => {
   return out > 0 ? out : base
 })
 
-const showOriginalPrice = computed(
-  () => hasDiscount.value && basePrice.value > 0
-)
+const showOriginalPrice = computed(() => hasDiscount.value && basePrice.value > 0)
 
 // === Combo / sabores ===
 const isCombo = computed(() => {
@@ -160,9 +118,7 @@ const isCombo = computed(() => {
   return String(props.product.productogeneral_escombo || '') === '1'
 })
 
-const maxFlavor = computed(() =>
-  Number(props.product.max_flavor || 0)
-)
+const maxFlavor = computed(() => Number(props.product.max_flavor || 0))
 
 // === Imagen ===
 const fullImageUrl = computed(() => {
@@ -172,48 +128,29 @@ const fullImageUrl = computed(() => {
   if (p.productogeneral_urlimagen) {
     return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   }
-
   // Prioridad 2: image_url ya mapeada
   if (p.image_url) {
-    if (p.image_url.startsWith('http')) {
-      return p.image_url
-    }
+    if (p.image_url.startsWith('http')) return p.image_url
     return `${props.imageBaseUrl}/${p.image_url}`
   }
-
-  // Prioridad 3: img_identifier (Tezo's Pizza)
+  // Prioridad 3: img_identifier
   if (p.img_identifier) {
     return `${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/600`
   }
-
   // Fallback
   return `${props.imageBaseUrl}/placeholder.png`
 })
 
 // === Interacción ===
-const handleClick = () => {
-  emit('click')
-}
-
-const handleKeyUp = (event) => {
-  if (event.key === 'Enter') {
-    emit('click')
-  }
-}
-
-// El padre decide qué hacer (abrir modal, agregar al carrito, etc.)
-const handleAddToCart = () => {
-  emit('add-to-cart', props.product)
-}
+const handleClick = () => emit('click')
+const handleKeyUp = (event) => { if (event.key === 'Enter') emit('click') }
+const handleAddToCart = () => emit('add-to-cart', props.product)
 
 onMounted(() => {
-  if (rootEl.value) {
-    props.setProductRef(props.product.id, props.categoryId, rootEl.value)
-  }
+  if (rootEl.value) props.setProductRef(props.product.id, props.categoryId, rootEl.value)
 })
 
 onBeforeUnmount(() => {
-  // pasar null para limpiar el observer en el padre
   props.setProductRef(props.product.id, props.categoryId, null)
 })
 </script>
@@ -228,13 +165,20 @@ onBeforeUnmount(() => {
     @keyup="handleKeyUp"
   >
     <div class="menu-product-card__image-wrapper">
-      <img
+      <NuxtImg
         class="menu-product-card__image"
         :src="fullImageUrl"
         :alt="displayName"
         loading="lazy"
+        format="webp"
+        quality="80"
+        fit="cover"
+        width="300" 
+        height="300"
+        sizes="150px md:250px lg:300px"
+        placeholder
       />
-      <!-- Botón flotante + -->
+      
       <button
         type="button"
         class="menu-product-card__add-btn"
@@ -255,7 +199,6 @@ onBeforeUnmount(() => {
       </p>
 
       <div class="menu-product-card__footer">
-        <!-- Bloque precios -->
         <div class="menu-product-card__price-block">
           <span
             v-if="showOriginalPrice"
@@ -269,9 +212,7 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <!-- Badges: descuento / combo / sabores -->
         <div class="menu-product-card__badges">
-          <!-- Descuento (ES / EN) -->
           <span
             v-if="hasDiscount && currentLang === 'es'"
             class="menu-product-card__tag menu-product-card__tag--discount"
@@ -286,7 +227,6 @@ onBeforeUnmount(() => {
             {{ discountPercent }}% Off • Save {{ formatCOP(discountAmount) }}
           </span>
 
-          <!-- Si no hay descuento, volvemos a tus tags anteriores -->
           <span
             v-else-if="isCombo"
             class="menu-product-card__tag menu-product-card__tag--combo"
@@ -307,6 +247,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Tus estilos originales se mantienen exactamente igual */
 .menu-product-card {
   background: #ffffff;
   border-radius: 0.3rem;
@@ -318,14 +259,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
   opacity: 1;
   transform: translateX(0);
-  transition:
-    opacity 0.4s ease-out,
-    transform 0.4s ease-out,
-    box-shadow 0.12s ease,
-    border-color 0.12s ease;
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
-/* estados usados por el observer del padre */
 .menu-product-card--hidden {
   opacity: 0;
   transform: translateX(-16px);
@@ -350,6 +286,8 @@ onBeforeUnmount(() => {
   background: #f3f4f6;
 }
 
+/* Ajuste importante: NuxtImg a veces genera spans wrappers si usas placeholders, 
+   pero aplicando la clase a la imagen debería funcionar directo */
 .menu-product-card__image {
   width: 100%;
   height: 100%;
@@ -357,7 +295,6 @@ onBeforeUnmount(() => {
   display: block;
 }
 
-/* Botón flotante + */
 .menu-product-card__add-btn {
   position: absolute;
   right: 0.6rem;
@@ -375,10 +312,8 @@ onBeforeUnmount(() => {
   justify-content: center;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
   cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  z-index: 2; /* Asegurar que esté sobre la imagen */
 }
 
 .menu-product-card__add-btn:hover {
@@ -387,7 +322,6 @@ onBeforeUnmount(() => {
   background: #b91c1c;
 }
 
-/* BODY */
 .menu-product-card__body {
   padding: 0.7rem 0.8rem 0.8rem;
   display: flex;
@@ -410,13 +344,11 @@ onBeforeUnmount(() => {
   max-height: 3.2em;
   overflow: hidden;
   text-overflow: ellipsis;
-
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
-/* FOOTER */
 .menu-product-card__footer {
   margin-top: auto;
   display: flex;
@@ -481,36 +413,29 @@ onBeforeUnmount(() => {
   background: #fee2e2;
 }
 
-/* 📱 RESPONSIVE MÓVIL */
 @media (max-width: 768px) {
   .menu-product-card {
     border-radius: 0.7rem;
     min-height: 0;
   }
-
   .menu-product-card__body {
     padding: 0.5rem 0.5rem 0.6rem;
     gap: 0.25rem;
   }
-
   .menu-product-card__name {
     font-size: 0.8rem;
   }
-
   .menu-product-card__desc {
     font-size: 0.68rem;
     line-height: 1.1;
   }
-
   .menu-product-card__price {
     font-size: 0.8rem;
   }
-
   .menu-product-card__tag {
     font-size: 0.6rem;
     padding: 0.14rem 0.45rem;
   }
-
   .menu-product-card__add-btn {
     width: 1.7rem;
     height: 1.7rem;

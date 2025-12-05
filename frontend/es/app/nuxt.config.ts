@@ -44,4 +44,11 @@ export default defineNuxtConfig({
       swr: 300,
     },
   },
+  image: {
+    // Dominios permitidos para optimizar
+    domains: ['img.restpe.com'], 
+    // Opciones por defecto
+    quality: 80,
+    format: ['webp']
+  }
 })

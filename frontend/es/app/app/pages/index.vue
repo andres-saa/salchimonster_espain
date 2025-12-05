@@ -60,7 +60,7 @@ import { useHead, useFetch } from '#imports'
 const route = useRoute()
 const router = useRouter()
 
-const pe_id = 38
+const pe_id = 1
 
 // 📡 Traer data (Mantenemos la estructura del primero con 'key' para hidratación)
 const { data: rawCategoriesData } = useFetch(
