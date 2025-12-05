@@ -15,20 +15,32 @@
       
       <div class="gallery-column">
         <div class="image-wrapper">
-<NuxtImg 
-  :key="fullImageUrl"
-  :src="fullImageUrl" 
-  :alt="displayName" 
-  class="main-image"
-  format="webp"
-  quality="95"
-  fit="cover"
-  
-  :style="{ viewTransitionName: currentProduct ? `product-image-${currentProduct.producto_id}` : 'none' }"
+          <NuxtImg 
+            :src="fullImageUrl" 
+            :alt="displayName" 
+            class="img-preview"
+            format="webp"
+            quality="80"
+            fit="cover"
+            width="300"
+            height="300"
+            aria-hidden="true"
+          />
 
-  sizes="100vw lg:600px"
-  placeholder
-/>
+          <NuxtImg 
+            :key="fullImageUrl"
+            :src="fullImageUrl" 
+            :alt="displayName" 
+            class="img-main"
+            :class="{ 'is-loaded': imageLoaded }"
+            @load="onImageLoad"
+            format="webp"
+            quality="95"
+            fit="cover"
+            width="600"
+            height="600"
+            sizes="100vw sm:500px lg:600px"
+          />
           
           <div class="desktop-nav-controls">
             <button @click="goToPrev" class="nav-arrow" title="Anterior">
@@ -79,7 +91,6 @@
                   fit="cover"
                   format="webp"
                   loading="lazy"
-                  placeholder
                 />
               </div>
               <div class="base-item-info">
@@ -192,7 +203,6 @@
               height="150"
               format="webp"
               loading="lazy"
-              placeholder
             />
             <span>{{ option.producto_descripcion }}</span>
           </button>
@@ -204,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
 import { usecartStore, useFetch, useHead } from '#imports'
@@ -219,11 +229,8 @@ const { showToast } = useToast()
 const pe_id = 38 
 
 // 1. DATA FETCHING 
-// La variable 'loading' será true mientras se realiza esta petición
 const { data: rawCategoriesData, pending: loading } = useFetch(() => `${URI}/tiendas/${pe_id}/products`, {
   key: 'menu-data',
-  // Opcional: lazy: true si prefieres que la navegación ocurra antes de que terminen los datos, 
-  // pero tu enfoque actual con el spinner global es bueno.
 })
 
 // 2. LOGICA DEL PRODUCTO ACTUAL
@@ -254,6 +261,10 @@ const checkedAddition = ref({})
 const exclusive = ref({})
 const productBaseToChange = ref(null)
 const showChangeDialog = ref(false)
+
+// NUEVO: Estado para cargar imagen HD
+const imageLoaded = ref(false)
+const onImageLoad = () => { imageLoaded.value = true }
 
 // Computed Props
 const basePrice = computed(() => {
@@ -441,6 +452,9 @@ const goToPrev = () => goToRelative(-1)
 
 watch(currentProduct, (newVal) => {
   if(newVal) {
+    // Resetear imagen loaded al cambiar de producto
+    imageLoaded.value = false
+    
     quantity.value = 1
     selectedAdditions.value = {}
     checkedAddition.value = {}
@@ -461,17 +475,6 @@ useHead({
 </script>
 
 <style scoped>
-/* --- VARIABLES --- */
-/* :root {
-  --bg-page: #f9fafb;
-  --text-main: #1f2937;
-  --text-light: #6b7280;
-  --border: #e5e7eb;
-  --primary: #dc2626;
-  --primary-dark: #b91c1c;
-}
-*/
-
 .page-wrapper {
   background-color: var(--bg-page, #f9fafb);
   min-height: 100vh;
@@ -482,13 +485,11 @@ useHead({
 }
 
 /* --- ESTADOS DE CARGA --- */
-
-/* 1. Spinner Global de Datos */
 .loading-overlay {
   position: fixed;
   inset: 0;
   background: var(--bg-page, #f9fafb);
-  z-index: 40; /* Por debajo del botón de volver pero encima del contenido */
+  z-index: 40; 
   display: flex;
   align-items: center;
   justify-content: center;
@@ -510,7 +511,6 @@ useHead({
 }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
-/* Animación de entrada para el contenido cuando los datos están listos */
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
@@ -519,22 +519,7 @@ useHead({
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 2. Transición de Imagen Progresiva (Nuxt Image) */
-/* Cuando Nuxt Image usa 'placeholder', coloca un span con la imagen borrosa 
-   y luego la imagen real encima. Controlamos la opacidad para la transición.
-*/
-.image-wrapper :deep(img) {
-  opacity: 0; /* Empieza invisible mientras se carga */
-  transition: opacity 0.5s ease-in-out;
-}
-/* Nuxt añade esta clase (o similar según config) cuando la imagen HD se carga */
-.image-wrapper :deep(img[src*=_ipx]) {
-   opacity: 1;
-}
-
-
-/* --- RESTO DE ESTILOS (Igual que antes) --- */
-
+/* --- BOTÓN VOLVER --- */
 .nav-btn {
   position: fixed;
   z-index: 50;
@@ -554,6 +539,7 @@ useHead({
 .nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
 .nav-btn--back { top: 1rem; left: 1rem; }
 
+/* --- CONTENEDOR PRINCIPAL --- */
 .product-container {
   display: grid;
   grid-template-columns: 1fr;
@@ -570,23 +556,45 @@ useHead({
   }
 }
 
-/* COLUMNA IZQUIERDA: IMAGEN */
+/* --- IMÁGENES (Lógica Thumbnail to Hero) --- */
 .gallery-column { width: 100%; }
 
 .image-wrapper {
   position: relative;
-  background: #f3f4f6; /* Fondo gris mientras carga el placeholder */
+  background: #f3f4f6;
   width: 100%;
-  aspect-ratio: 4/4;
+  aspect-ratio: 1/1; /* Mantiene la proporción cuadrada */
   border-radius: 20px;
   overflow: hidden;
 }
-/* La clase se aplica al componente NuxtImg */
-.main-image {
+
+/* Estilo base para ambas imágenes (previa y final) */
+.img-preview,
+.img-main {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: opacity 0.5s ease;
+}
+
+/* La imagen caché (baja res) está abajo */
+.img-preview {
+  z-index: 1;
+  /* Sin blur para que se vea nítida desde el frame 0 */
+}
+
+/* La imagen HD está encima, invisible al inicio */
+.img-main {
+  z-index: 2;
+  opacity: 0;
+}
+/* Cuando carga, se vuelve opaca */
+.img-main.is-loaded {
+  opacity: 1;
 }
 
 @media (min-width: 1024px) {
@@ -594,10 +602,10 @@ useHead({
     position: sticky;
     top: 40px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-    aspect-ratio: 1/1;
   }
 }
 
+/* CONTROLES DE NAVEGACIÓN PC */
 .desktop-nav-controls {
   display: none;
 }
@@ -631,7 +639,7 @@ useHead({
   .nav-arrow:hover { transform: scale(1.1); background: white; }
 }
 
-/* COLUMNA DERECHA: DETALLES */
+/* --- DETALLES --- */
 .details-column {
   padding: 20px;
   background: white;
@@ -680,7 +688,7 @@ useHead({
   margin: 1.5rem 0;
 }
 
-/* SECCIONES */
+/* SECCIONES (Modificadores) */
 .section-block { margin-bottom: 2rem; }
 .section-title {
   font-size: 1rem;
