@@ -291,41 +291,47 @@ const sessionToken = ref(
 )
 
 // ==========================================
-// LÓGICA DE IMÁGENES
+// LÓGICA DE IMÁGENES (solo read-photo-product)
 // ==========================================
 const imgCache = ref<Record<number, string>>({})
-const lowResSite = (site_id: number)  => `${BACKEND_BASE}/read-product-image/96/site-${site_id}`
-const highResSite = (site_id: number) => `${BACKEND_BASE}/read-product-image/600/site-${site_id}`
-const byImgId = (img_id: number)      => `${BACKEND_BASE}/read-photo-product/${img_id}`
+
+const byImgId = (img_id: number | string) =>
+  `${BACKEND_BASE}/read-photo-product/${img_id}`
+
+// 👉 Imagen por defecto si no hay img_id o falla la carga
+const FALLBACK_IMG = `${BACKEND_BASE}/read-photo-product/default`
 
 const currentImage = (store: Store) => {
+  // Si ya tenemos cacheado, usarlo
   if (imgCache.value[store.id]) return imgCache.value[store.id]
-  imgCache.value[store.id] = lowResSite(store.id)
-  return imgCache.value[store.id]
+
+  // Si la sede tiene img_id, usamos read-photo-product
+  if (store.img_id) {
+    const url = byImgId(store.img_id)
+    imgCache.value[store.id] = url
+    return url
+  }
+
+  // Fallback genérico
+  imgCache.value[store.id] = FALLBACK_IMG
+  return FALLBACK_IMG
 }
 
 const loadHighResImage = (store: Store) => {
-  if (store.img_id) {
-    const hi = byImgId(store.img_id)
-    const probe = new Image()
-    probe.src = hi
-    probe.onload = () => { imgCache.value[store.id] = hi }
-    probe.onerror = () => {
-      const fallbackHi = highResSite(store.id)
-      const p2 = new Image()
-      p2.src = fallbackHi
-      p2.onload = () => { imgCache.value[store.id] = fallbackHi }
-    }
-    return
-  }
-  const hi = highResSite(store.id)
+  // Si no hay img_id, no hacemos nada especial
+  if (!store.img_id) return
+
+  const hi = byImgId(store.img_id)
   const probe = new Image()
   probe.src = hi
-  probe.onload = () => { imgCache.value[store.id] = hi }
+  probe.onload = () => {
+    imgCache.value[store.id] = hi
+  }
+  // Si falla, dejamos que onImgError ponga el fallback
 }
 
 const onImgError = (store: Store) => {
-  imgCache.value[store.id] = lowResSite(store.id)
+  imgCache.value[store.id] = FALLBACK_IMG
 }
 
 // ==========================================
@@ -334,8 +340,10 @@ const onImgError = (store: Store) => {
 function getPostalCode(city: string): string {
   // Ajusta si quieres códigos postales específicos por ciudad en España
   switch (city) {
-    case 'Valencia': return '46001'
-    default: return 'España'
+    case 'Valencia':
+      return '46001'
+    default:
+      return 'España'
   }
 }
 
@@ -354,11 +362,15 @@ function getCoordsFromSite(site: RawSite): { lat: number; lng: number } {
 
 function formatCOP(value: number | null | undefined): string {
   if (value == null) return ''
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value)
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0
+  }).format(value)
 }
 
 function getStoreById(id: number): Store | undefined {
-  return stores.value.find(s => s.id === id)
+  return stores.value.find((s) => s.id === id)
 }
 
 // ==========================================
@@ -369,7 +381,7 @@ async function loadCities() {
     const response = await fetch(`${BACKEND_BASE}/cities`)
     if (!response.ok) throw new Error(`Error HTTP ${response.status}`)
     const data = (await response.json()) as City[]
-    cities.value = data.filter(c => c.visible !== false)
+    cities.value = data.filter((c) => c.visible !== false)
   } catch (err) {
     console.error('Error ciudades:', err)
   }
@@ -381,7 +393,7 @@ async function loadStores() {
     if (!response.ok) throw new Error(`Error HTTP ${response.status}`)
     const data = (await response.json()) as RawSite[]
 
-    // Ahora filtramos por España (Europe/Madrid) pero nombre más genérico
+    // Filtramos por España (Europe/Madrid)
     const spanishSites = data.filter(
       (s) => s.show_on_web && s.time_zone === 'Europe/Madrid'
     )
@@ -414,10 +426,13 @@ async function loadStatuses() {
     try {
       const res = await fetch(`${BACKEND_BASE}/site/${store.id}/status`)
       if (!res.ok) throw new Error(`Error HTTP ${res.status}`)
-      const data = await res.json() as { status: string; next_opening_time: string | null }
+      const data = (await res.json()) as {
+        status: string
+        next_opening_time: string | null
+      }
       store.status = data.status
       store.nextOpeningTime = data.next_opening_time
-    } catch (err) {
+    } catch (_err) {
       if (!store.status) store.status = 'unknown'
     }
   })
@@ -433,7 +448,7 @@ async function loadStatuses() {
 function goToStore(store: Store, mode: 'delivery' | 'pickup' | 'default') {
   if (typeof window === 'undefined') return
   const protocol = window.location.protocol || 'http:'
-  let url = `${protocol}//${store.subdomain}.salchimonster.es` // Cambiar localhost por tu dominio real en producción
+  let url = `${protocol}//${store.subdomain}.salchimonster.es`
 
   const params = new URLSearchParams()
 
@@ -441,8 +456,14 @@ function goToStore(store: Store, mode: 'delivery' | 'pickup' | 'default') {
   // y tenemos un resultado de cobertura válido cargado.
   if (mode === 'delivery' && coverageResult.value) {
     params.append('address', coverageResult.value.formatted_address)
-    if (coverageResult.value.delivery_cost_cop !== undefined && coverageResult.value.delivery_cost_cop !== null) {
-      params.append('delivery_cost', coverageResult.value.delivery_cost_cop.toString())
+    if (
+      coverageResult.value.delivery_cost_cop !== undefined &&
+      coverageResult.value.delivery_cost_cop !== null
+    ) {
+      params.append(
+        'delivery_cost',
+        coverageResult.value.delivery_cost_cop.toString()
+      )
     }
     // Opcional: indicar que es delivery
     params.append('modality', 'delivery')
@@ -463,16 +484,28 @@ function goToStore(store: Store, mode: 'delivery' | 'pickup' | 'default') {
 // FILTROS & MAPA
 // ==========================================
 const orderedCities = computed(() => {
-  return [...cities.value.filter(s => ![18, 15].includes(s.city_id))]
-    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+  return [...cities.value.filter((s) => ![18, 15].includes(s.city_id))].sort(
+    (a, b) => (a.index ?? 0) - (b.index ?? 0)
+  )
 })
-const selectedCity = computed(() => cities.value.find(c => c.city_id === selectedCityId.value) ?? null)
+
+const selectedCity = computed(
+  () => cities.value.find((c) => c.city_id === selectedCityId.value) ?? null
+)
+
 const filteredStores = computed(() => {
   let base = stores.value
-  if (selectedCityId.value) base = base.filter(s => s.cityId === selectedCityId.value)
+  if (selectedCityId.value)
+    base = base.filter((s) => s.cityId === selectedCityId.value)
   const bounds = mapBounds.value
   if (bounds) {
-    base = base.filter((s) => s.lat <= bounds.north && s.lat >= bounds.south && s.lng <= bounds.east && s.lng >= bounds.west)
+    base = base.filter(
+      (s) =>
+        s.lat <= bounds.north &&
+        s.lat >= bounds.south &&
+        s.lng <= bounds.east &&
+        s.lng >= bounds.west
+    )
   }
   return base
 })
@@ -480,7 +513,12 @@ const filteredStores = computed(() => {
 function updateBounds() {
   if (!map.value) return
   const b = map.value.getBounds()
-  mapBounds.value = { north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }
+  mapBounds.value = {
+    north: b.getNorth(),
+    south: b.getSouth(),
+    east: b.getEast(),
+    west: b.getWest()
+  }
 }
 
 onMounted(async () => {
@@ -509,12 +547,16 @@ onMounted(async () => {
     dragging: false,
     tap: false
   })
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
-  
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map.value)
+
   const fireIcon = L.divIcon({
     className: 'leaflet-div-icon fire-icon',
     html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" alt="Salchimonster flame" class="fire-img" />`
   })
+
   dropoffIcon = L.icon({
     iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
     iconSize: [25, 41],
@@ -556,24 +598,41 @@ function onCityChange() {
   addressQuery.value = ''
   suggestions.value = []
   showSuggestions.value = false
+
   if (!map.value || !leafletModule.value) return
   const L = leafletModule.value
   const cityIdAtClick = selectedCityId.value
+
   if (!initialBounds.value) initialBounds.value = map.value.getBounds()
-  
+
   if (!cityIdAtClick) {
-    map.value.flyToBounds(initialBounds.value, { padding: [40, 40], animate: true, duration: 0.9 })
+    map.value.flyToBounds(initialBounds.value, {
+      padding: [40, 40],
+      animate: true,
+      duration: 0.9
+    })
     return
   }
-  const cityStores = stores.value.filter(s => s.cityId === cityIdAtClick)
-  const latlngs: [number, number][] = cityStores.map(s => [s.lat, s.lng])
+
+  const cityStores = stores.value.filter((s) => s.cityId === cityIdAtClick)
+  const latlngs: [number, number][] = cityStores.map((s) => [s.lat, s.lng])
   if (!latlngs.length) return
+
   const targetBounds = L.latLngBounds(latlngs)
-  
-  map.value.flyToBounds(initialBounds.value, { padding: [40, 40], animate: true, duration: 0.7 })
+
+  map.value.flyToBounds(initialBounds.value, {
+    padding: [40, 40],
+    animate: true,
+    duration: 0.7
+  })
+
   setTimeout(() => {
     if (!map.value || selectedCityId.value !== cityIdAtClick) return
-    map.value.flyToBounds(targetBounds, { padding: [40, 40], animate: true, duration: 0.9 })
+    map.value.flyToBounds(targetBounds, {
+      padding: [40, 40],
+      animate: true,
+      duration: 0.9
+    })
   }, 750)
 }
 
@@ -581,13 +640,23 @@ function onCityChange() {
 // AUTOCOMPLETE
 // ==========================================
 let autocompleteTimeout: any = null
+
 function onAddressInput() {
   coverageResult.value = null
   showSuggestions.value = true
+
   if (autocompleteTimeout) clearTimeout(autocompleteTimeout)
+
   const query = addressQuery.value.trim()
-  if (!query) { suggestions.value = []; loadingAutocomplete.value = false; return }
-  autocompleteTimeout = setTimeout(() => { fetchAutocomplete(query) }, 300)
+  if (!query) {
+    suggestions.value = []
+    loadingAutocomplete.value = false
+    return
+  }
+
+  autocompleteTimeout = setTimeout(() => {
+    fetchAutocomplete(query)
+  }, 300)
 }
 
 async function fetchAutocomplete(query: string) {
@@ -599,14 +668,24 @@ async function fetchAutocomplete(query: string) {
     params.append('countries', 'es')
     params.append('limit', '5')
     params.append('session_token', sessionToken.value)
-    if (selectedCity.value && !selectedCity.value.city_name.toLowerCase().includes('solo pick up')) {
+
+    if (
+      selectedCity.value &&
+      !selectedCity.value.city_name.toLowerCase().includes('solo pick up')
+    ) {
       params.append('city', selectedCity.value.city_name)
     }
-    const res = await fetch(`${LOCATIONS_BASE}/es/places/autocomplete?${params.toString()}`)
+
+    const res = await fetch(
+      `${LOCATIONS_BASE}/es/places/autocomplete?${params.toString()}`
+    )
     if (!res.ok) throw new Error('Error autocomplete')
     const data = await res.json()
     const preds = Array.isArray(data.predictions) ? data.predictions : []
-    suggestions.value = preds.map((p: any) => ({ place_id: p.place_id, description: p.description || '' }))
+    suggestions.value = preds.map((p: any) => ({
+      place_id: p.place_id,
+      description: p.description || ''
+    }))
   } catch (e) {
     console.error(e)
     suggestions.value = []
@@ -628,38 +707,67 @@ async function fetchCoverageDetails(placeId: string) {
     params.append('place_id', placeId)
     params.append('session_token', sessionToken.value)
     params.append('language', 'es')
-    const res = await fetch(`${LOCATIONS_BASE}/es/places/coverage-details?${params.toString()}`)
+
+    const res = await fetch(
+      `${LOCATIONS_BASE}/es/places/coverage-details?${params.toString()}`
+    )
     if (!res.ok) throw new Error('Error coverage')
+
     const data = (await res.json()) as CoverageDetails
     coverageResult.value = data
+
     if (!map.value || !leafletModule.value) return
     const L = leafletModule.value
+
     if (data.lat != null && data.lng != null) {
       if (dropoffMarker.value) map.value.removeLayer(dropoffMarker.value)
-      dropoffMarker.value = L.marker([data.lat, data.lng], { icon: dropoffIcon }).addTo(map.value)
+      dropoffMarker.value = L.marker([data.lat, data.lng], {
+        icon: dropoffIcon
+      }).addTo(map.value)
     }
+
     let nearestStore: Store | undefined
-    if (data.nearest && data.nearest.site) nearestStore = stores.value.find((s) => s.id === data.nearest!.site.site_id)
+    if (data.nearest && data.nearest.site) {
+      nearestStore = stores.value.find(
+        (s) => s.id === data.nearest!.site.site_id
+      )
+    }
+
     if (nearestStore) {
       const cityId = nearestStore.cityId
       selectedCityId.value = cityId
       selectedStoreId.value = nearestStore.id
+
       const cityStores = stores.value.filter((s) => s.cityId === cityId)
       const latlngs: [number, number][] = cityStores.map((s) => [s.lat, s.lng])
+
       if (latlngs.length > 0) {
         if (!initialBounds.value) initialBounds.value = map.value.getBounds()
+
         const targetBounds = L.latLngBounds(latlngs)
         const cityIdAtMoment = cityId
-        map.value.flyToBounds(initialBounds.value, { padding: [40, 40], animate: true, duration: 0.7 })
+
+        map.value.flyToBounds(initialBounds.value, {
+          padding: [40, 40],
+          animate: true,
+          duration: 0.7
+        })
+
         setTimeout(() => {
           if (!map.value || selectedCityId.value !== cityIdAtMoment) return
-          map.value.flyToBounds(targetBounds, { padding: [40, 40], animate: true, duration: 0.9 })
+          map.value.flyToBounds(targetBounds, {
+            padding: [40, 40],
+            animate: true,
+            duration: 0.9
+          })
         }, 750)
+
         const marker = markers.value[nearestStore!.id]
         if (marker) marker.openPopup()
         return
       }
     }
+
     if (data.lat != null && data.lng != null) {
       map.value.setView([data.lat, data.lng], 14, { animate: true })
     }
@@ -668,6 +776,7 @@ async function fetchCoverageDetails(placeId: string) {
   }
 }
 </script>
+
 
 <style scoped>
 /* =========================================
