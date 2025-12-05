@@ -15,17 +15,20 @@
       
       <div class="gallery-column">
         <div class="image-wrapper">
-          <NuxtImg 
-            :key="fullImageUrl"
-            :src="fullImageUrl" 
-            :alt="displayName" 
-            class="main-image"
-            format="webp"
-            quality="95"
-            fit="cover"
-            sizes="100vw lg:600px"
-            placeholder
-          />
+<NuxtImg 
+  :key="fullImageUrl"
+  :src="fullImageUrl" 
+  :alt="displayName" 
+  class="main-image"
+  format="webp"
+  quality="95"
+  fit="cover"
+  
+  :style="{ viewTransitionName: currentProduct ? `product-image-${currentProduct.producto_id}` : 'none' }"
+
+  sizes="100vw lg:600px"
+  placeholder
+/>
           
           <div class="desktop-nav-controls">
             <button @click="goToPrev" class="nav-arrow" title="Anterior">

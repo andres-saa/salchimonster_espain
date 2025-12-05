@@ -21,3 +21,13 @@
   --bg-card: #ffffff;
   --border: #e5e7eb;
 }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.4s; /* Ajusta la velocidad si quieres */
+}
+
+/* Esto asegura que la imagen mantenga su proporción mientras viaja */
+::view-transition-group(*[style*="view-transition-name: product-image-"]) {
+  overflow: hidden;
+}

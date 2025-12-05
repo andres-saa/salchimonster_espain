@@ -43,6 +43,9 @@ export default defineNuxtConfig({
       prerender: true,
       swr: 300,
     },
+    experimental: {
+    viewTransition: true
+  },
   },
   image: {
     // Dominios permitidos para optimizar
