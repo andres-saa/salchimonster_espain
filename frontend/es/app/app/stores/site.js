@@ -1,6 +1,6 @@
-// /stores/sites.ts o /stores/sites.js
+// /stores/site.js o /stores/sites.js
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { URI } from '../service/conection'
 
 export const useSitesStore = defineStore(
@@ -36,14 +36,24 @@ export const useSitesStore = defineStore(
     })
 
     const current_delivery = ref(0)
-    const status = ref('closed')
+
+    // 🔥 Status completo de la sede actual (sin tipos TS)
+    const status = ref({
+      status: 'unknown',          // 'open' | 'closed' | 'unknown'
+      next_opening_time: null,    // string o null
+      networks: null,             // array, objeto o null
+    })
+
+    let statusTimer = null
 
     // ───────────── ACTIONS ─────────────
     function setLocation(newLocation) {
       location.value = newLocation
+      visibles.value.currentSite = true
+      // el watcher de site_id se encarga de pedir el status
     }
 
-    async function setVisible(item, value) {
+    function setVisible(item, value) {
       if (item === 'loading') {
         visibles.value.loading = true
 
@@ -91,12 +101,68 @@ export const useSitesStore = defineStore(
       location.value.neigborhood.delivery_price = 0
     }
 
-    // (equivalente a tu getter fucion: () => 0)
     function fucion() {
       return 0
     }
 
-    // Lo que expones en el store
+    // ───────────── STATUS DE LA SEDE ACTUAL ─────────────
+    async function fetchSiteStatus(explicitSiteId) {
+      const siteId =
+        explicitSiteId ||
+        (location.value?.site?.site_id ? location.value.site.site_id : null)
+
+      if (!siteId) return
+
+      try {
+        const res = await fetch(`${URI}/site/${siteId}/status`)
+        if (!res.ok) {
+          throw new Error(`Error HTTP ${res.status}`)
+        }
+
+        const data = await res.json()
+        // data esperado: { status: "open" | "closed" | "close", next_opening_time, networks }
+
+        const raw = data.status || 'unknown'
+        let normalized = 'unknown'
+        if (raw === 'open') normalized = 'open'
+        else if (raw === 'closed' || raw === 'close') normalized = 'closed'
+
+        status.value = {
+          status: normalized,
+          next_opening_time: data.next_opening_time || null,
+          networks: data.networks || status.value.networks || null,
+        }
+      } catch (err) {
+        console.error('Error al obtener el status de la sede:', err)
+        status.value = {
+          status: 'unknown',
+          next_opening_time: null,
+          networks: status.value.networks || null,
+        }
+      }
+    }
+
+    function initStatusWatcher() {
+      if (statusTimer) return
+
+      // primera llamada
+      fetchSiteStatus()
+
+      statusTimer = setInterval(() => {
+        fetchSiteStatus()
+      }, 30000)
+    }
+
+    // cuando cambie el site_id → pedir status nuevo
+    watch(
+      () => location.value?.site?.site_id,
+      (newId, oldId) => {
+        if (!newId || newId === oldId) return
+        fetchSiteStatus(newId)
+      },
+      { immediate: true },
+    )
+
     return {
       // state
       location,
@@ -104,7 +170,7 @@ export const useSitesStore = defineStore(
       current_delivery,
       status,
 
-      // getters "a mano"
+      // getters manuales
       fucion,
 
       // actions
@@ -112,16 +178,14 @@ export const useSitesStore = defineStore(
       setVisible,
       setNeighborhoodPrice,
       setNeighborhoodPriceCero,
+      fetchSiteStatus,
+      initStatusWatcher,
     }
   },
   {
-    // ───────────── PERSIST ─────────────
     persist: {
       key: 'sidte',
-      paths: ['location'],
-      // Si usas @pinia-plugin-persistedstate/nuxt,
-      // puedes usar storage: persistedState.localStorage
-      // storage: persistedState.localStorage,
+      paths: ['location'], // status no se persiste, siempre fresco
     },
   },
 )

@@ -10,13 +10,17 @@ const siteStore = useSitesStore()
 const sidebarStore = useSidebarStore()
 const user = useUserStore()
 
-// Nombre de la marca (si lo usas)
 const siteName = ref('SALCHIMONSTER')
 
-// Estado abierto/cerrado sincronizado con el backend
-const isOpen = computed(() => siteStore.status?.status === 'open')
+// ✅ Estado abierto/cerrado sincronizado con el backend
+const isOpen = computed(() => {
+  const st = siteStore.status
+  if (!st) return false
+  if (typeof st === 'string') return st === 'open'
+  return st.status === 'open'
+})
 
-// Cantidad en carrito (si luego la conectas al store del carrito)
+// (luego lo conectas al store del carrito si quieres)
 const cartCount = ref(3)
 
 // Idiomas
@@ -25,19 +29,19 @@ const languages = [
   { name: 'EN', label: 'English', flag: 'https://flagcdn.com/w20/us.png' }
 ]
 
-// Asegurar que haya idioma por defecto
+// Idioma por defecto
 if (!user.lang || !user.lang.name) {
   user.lang = languages[0]
 }
 
 const site = route.params.site
 
-// Dropdown idioma abierto/cerrado
+// Dropdown idioma
 const isLangOpen = ref(false)
 
-// --- NUEVO: refs para "Más" ---
+// --- refs para menús / "Más" ---
 const menusContainerRef = ref(null)
-const menuItemRefs = ref([])
+const menuItemRefs = ref([])     // 👈 sin <any[]>
 const moreButtonRef = ref(null)
 
 const visibleMenus = ref([])
@@ -45,36 +49,31 @@ const overflowMenus = ref([])
 const isMoreOpen = ref(false)
 const windowWidth = ref(0)
 
-// 🔹 CONFIGURACIÓN: cuántos menús mostrar según ancho
-// Ajusta los maxWidth y visible a tu gusto
+// CONFIG: cuántos menús según ancho
 const menuVisibilityConfig = [
-  // Hasta 1024px (desktop pequeño): mostrar 4 menús arriba
   { maxWidth: 1024, visible: 4 },
-  // Hasta 1280px: mostrar 6 menús
   { maxWidth: 1280, visible: 6 },
-  // Más grande: mostrar todos
   { maxWidth: Infinity, visible: 'all' }
 ]
 
-// Menús **dinámicos por idioma** → lista completa
+// Menús dinámicos por idioma
 const menusAll = computed(() => {
   const langKey = (user.lang?.name || 'es').toLowerCase()
   const t = texts[langKey]?.menus || {}
 
   return [
     { label: t.domicilios || 'Domicilios', to: '/' },
-    // { label: t.kids || 'Kids', to: `/kids` },
     { label: t.sedes || 'Sedes', to: `/sedes` },
     { label: t.carta || 'Carta', to: `/carta` },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` },
     { label: t.franquicias || 'Franquicias', to: `/franquicias` },
     { label: t.ayuda || 'Ayuda', to: `/pqr` },
     { label: t.colaboraciones || 'Colaboraciones', to: `/colaboraciones` },
-      { label: t.sonando || 'Sonando', to: `/sonando` }
+    { label: t.sonando || 'Sonando', to: `/sonando` }
   ]
 })
 
-
+// Redes por defecto
 const defaultSocialLinks = [
   {
     name: 'facebook',
@@ -98,17 +97,16 @@ const defaultSocialLinks = [
   }
 ]
 
+// ✅ redes desde el status de la sede
 const socialLinks = computed(() => {
-  // Ajusta según cómo tengas el store:
-  // por ejemplo siteStore.currentSite, siteStore.site, etc.
-  const raw = siteStore.status?.networks || siteStore.current?.networks || siteStore.site?.networks
+  const raw =
+    siteStore.status?.networks ||
+    siteStore.current?.networks ||
+    siteStore.site?.networks
 
   if (!raw) return defaultSocialLinks
-
-  // Si ya viene como array desde el backend:
   if (Array.isArray(raw)) return raw
 
-  // Si viene como string JSON:
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
     return Array.isArray(parsed) ? parsed : defaultSocialLinks
@@ -117,7 +115,6 @@ const socialLinks = computed(() => {
     return defaultSocialLinks
   }
 })
-
 
 const isActiveRoute = (path) => route.path === path
 
@@ -141,7 +138,7 @@ const handleResize = () => {
   }
 }
 
-// Helper: cuántos menús mostrar según ancho y config
+// helper para saber cuántos menús mostrar
 const getVisibleCountForWidth = (width, totalMenus) => {
   const rule =
     menuVisibilityConfig.find((rule) => width <= rule.maxWidth) ||
@@ -151,11 +148,9 @@ const getVisibleCountForWidth = (width, totalMenus) => {
   return Math.min(rule.visible, totalMenus)
 }
 
-// --- NUEVO: cálculo de visible/overflow según resolución ---
 const recalcMenus = () => {
   const allMenus = menusAll.value
 
-  // SSR o sin ancho conocido → mostrar todo
   if (!windowWidth.value) {
     visibleMenus.value = allMenus
     overflowMenus.value = []
@@ -163,8 +158,7 @@ const recalcMenus = () => {
     return
   }
 
-  // En móvil no aplicamos recorte: el menú de arriba ni se ve (CSS),
-  // y la navegación es por sidebar.
+  // Móvil: todo se maneja por sidebar, no recortamos
   if (windowWidth.value <= 900) {
     visibleMenus.value = allMenus
     overflowMenus.value = []
@@ -183,7 +177,6 @@ const recalcMenus = () => {
   }
 }
 
-// 🔹 Saber si hay overflow para mostrar el botón de barras en desktop
 const hasOverflow = computed(() => overflowMenus.value.length > 0)
 
 onMounted(() => {
@@ -192,6 +185,9 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', handleResize)
   }
+
+  // arrancar polling de status cada 30s
+  siteStore.initStatusWatcher()
 
   nextTick().then(() => {
     recalcMenus()
@@ -204,7 +200,7 @@ onBeforeUnmount(() => {
   }
 })
 
-// Recalcular cuando cambie el idioma o el ancho de ventana
+// Recalcular cuando cambie idioma o ancho
 watch(
   [menusAll, windowWidth],
   () => {
@@ -215,6 +211,7 @@ watch(
   { immediate: true }
 )
 </script>
+
 
 <template>
   <div class="app-topbar-container">
@@ -239,7 +236,7 @@ watch(
                 <div style="display: flex;align-items: center;color: var(--primary-color);">
                   <Icon name="mdi:map-marker" />
                   <span style="text-transform: capitalize;">
-                    {{ sede }}
+                    {{ siteStore?.location?.site?.site_name }}
                   </span>
                 </div>
 

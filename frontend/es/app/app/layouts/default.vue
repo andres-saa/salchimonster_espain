@@ -39,9 +39,9 @@
         :class="{ 'app-layout__content--full': isCartaRoute }"
       >
         <!-- 🔥 Transición Nuxt entre páginas -->
-        <Transition name="page" mode="out-in">
+         
           <slot />
-        </Transition>
+        
       </main>
     </div>
   </div>

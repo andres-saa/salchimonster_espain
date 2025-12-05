@@ -11,7 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const store = usecartStore()
 
-const pe_id = 1
+const pe_id = 38
 
 // 📡 Traer data real del backend
 // Ahora este endpoint devuelve: { site_id, local_id, categorias: [...] }
@@ -19,9 +19,9 @@ const { data: rawCategoriesData, pending, error } = useFetch(
   () => `${URI}/tiendas/${pe_id || 1}/products`,
   {
     // Solo en el cliente, para no bloquear SSR ni la navegación
-    server: false,
-    // No bloquea el render inicial, dispara luego
-    lazy: true,
+    // server: false,
+    // // No bloquea el render inicial, dispara luego
+    // lazy: true,
     // Valor por defecto para que 'categories' no truene
     default: () => ({ categorias: [] })
   }

@@ -124,6 +124,8 @@
   </div>
 </template>
 
+
+
 <script setup>
 import { onMounted, ref } from 'vue'
 import { URI } from '@/service/conection'
@@ -131,53 +133,44 @@ import { URI } from '@/service/conection'
 // Cache en memoria de la URL actual de cada sede
 const imgCache = ref({})
 
-// ---------- Endpoints imagen ----------
-const lowResSite = (site_id)  => `${URI}/read-product-image/96/site-${site_id}`
-const highResSite = (site_id) => `${URI}/read-product-image/600/site-${site_id}`
-const byImgId = (img_id)      => `${URI}/read-photo-product/${img_id}`
+// 🔥 Sólo este endpoint
+const byImgId = (img_id) => `${URI}/read-photo-product/${img_id}`
+
+// Imagen de fallback si no hay img_id o falla la carga
+const FALLBACK_IMG =
+  'https://gestion.salchimonster.com/images/logo.png'
 
 // Devuelve la URL actual a mostrar para la sede
 const currentImage = (sede) => {
   if (imgCache.value[sede.site_id]) return imgCache.value[sede.site_id]
 
-  imgCache.value[sede.site_id] = lowResSite(sede.site_id)
+  if (sede?.img_id) {
+    imgCache.value[sede.site_id] = byImgId(sede.img_id)
+  } else {
+    imgCache.value[sede.site_id] = FALLBACK_IMG
+  }
+
   return imgCache.value[sede.site_id]
 }
 
-// Al cargar la imagen actual, intentamos “mejorar” a la mejor disponible
+// Ya no hay “low/high res”: solo aseguramos que la que tenemos carga
 const loadHighResImage = (sede) => {
-  if (sede?.img_id) {
-    const hi = byImgId(sede.img_id)
-    const probe = new Image()
-    probe.src = hi
-    probe.onload = () => {
-      imgCache.value[sede.site_id] = hi
-    }
-    probe.onerror = () => {
-      const fallbackHi = highResSite(sede.site_id)
-      const p2 = new Image()
-      p2.src = fallbackHi
-      p2.onload = () => {
-        imgCache.value[sede.site_id] = fallbackHi
-      }
-    }
-    return
-  }
-
-  const hi = highResSite(sede.site_id)
+  if (!sede?.img_id) return
+  const url = byImgId(sede.img_id)
   const probe = new Image()
-  probe.src = hi
+  probe.src = url
   probe.onload = () => {
-    imgCache.value[sede.site_id] = hi
+    imgCache.value[sede.site_id] = url
   }
 }
 
 // Fallback si <img> falla
 const onImgError = (sede) => {
-  imgCache.value[sede.site_id] = lowResSite(sede.site_id)
+  imgCache.value[sede.site_id] = FALLBACK_IMG
 }
 
 // ------------------ Datos ------------------
+// El resto de tu lógica queda igual
 const sedes  = ref([])
 const cities = ref([])
 
@@ -243,6 +236,9 @@ const closeDialog = () => {
   selectedSede.value = null
 }
 </script>
+
+
+
 
 <style scoped>
 .main-container {

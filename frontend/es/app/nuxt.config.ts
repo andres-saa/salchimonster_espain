@@ -27,21 +27,21 @@ export default defineNuxtConfig({
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     },
   },
-  // routeRules: {
-  //   '/': {
-  //     prerender: true,
-  //     swr: 300,
-  //   },
-  //   '/carta': {
-  //     prerender: true,
-  //     swr: 300,
-  //   },
-  //   'rastrear': {
-  //     prerender: true,
-  //     swr: 300,
-  //   },'horarios': {
-  //     prerender: true,
-  //     swr: 300,
-  //   },
-  // },
+  routeRules: {
+    '/': {
+      prerender: true,
+      swr: 300,
+    },
+    '/carta': {
+      prerender: true,
+      swr: 300,
+    },
+    '/rastrear': {
+      prerender: true,
+      swr: 300,
+    },'/horarios': {
+      prerender: true,
+      swr: 300,
+    },
+  },
 })
