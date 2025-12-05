@@ -13,11 +13,17 @@
       
       <div class="gallery-column">
         <div class="image-wrapper">
-          <img 
+          <NuxtImg 
             :src="fullImageUrl" 
             :alt="displayName" 
             class="main-image"
+            format="webp"
+            quality="85"
+            fit="cover"
+            sizes="100vw lg:600px"
+            preload
           />
+          
           <div class="desktop-nav-controls">
             <button @click="goToPrev" class="nav-arrow" title="Anterior">
               <Icon name="mdi:chevron-left" size="30" />
@@ -59,7 +65,15 @@
               class="base-item-card"
             >
               <div class="base-item-img">
-                <img :src="`https://img.restpe.com/${base.producto_urlimagen}`" alt="foto" />
+                <NuxtImg 
+                  :src="`https://img.restpe.com/${base.producto_urlimagen}`" 
+                  alt="foto" 
+                  width="100"
+                  height="100"
+                  fit="cover"
+                  format="webp"
+                  loading="lazy"
+                />
               </div>
               <div class="base-item-info">
                 <div class="base-qty-badge">{{ Math.round(base.productocombo_cantidad) }}x</div>
@@ -165,7 +179,13 @@
             class="option-card"
             @click="selectAlternative(option)"
           >
-            <img :src="`https://img.restpe.com/${option.producto_urlimagen}`" />
+            <NuxtImg 
+              :src="`https://img.restpe.com/${option.producto_urlimagen}`" 
+              width="150"
+              height="150"
+              format="webp"
+              loading="lazy"
+            />
             <span>{{ option.producto_descripcion }}</span>
           </button>
         </div>
@@ -188,9 +208,9 @@ const router = useRouter()
 const store = usecartStore()
 const { showToast } = useToast()
 
-const pe_id = 38 // ID tienda
+const pe_id = 38 
 
-// 1. DATA FETCHING (Igual que en el snippet 1)
+// 1. DATA FETCHING 
 const { data: rawCategoriesData, pending: loading } = useFetch(() => `${URI}/tiendas/${pe_id}/products`, {
   key: 'menu-data'
 })
@@ -216,7 +236,7 @@ const currentProduct = computed(() => {
   return flatProducts.value.find(p => Number(p.producto_id) === currentProductId.value) || null
 })
 
-// 3. ESTADO Y LÓGICA DE NEGOCIO (Igual que en snippet 2)
+// 3. ESTADO Y LÓGICA DE NEGOCIO
 const quantity = ref(1)
 const selectedAdditions = ref({})
 const checkedAddition = ref({})
@@ -228,7 +248,6 @@ const showChangeDialog = ref(false)
 const basePrice = computed(() => {
   if(!currentProduct.value) return 0
   const p = currentProduct.value
-  // Prioridad: Precio presentación > Precio general > Precio simple
   return Number(p.lista_presentacion?.[0]?.producto_precio || p.productogeneral_precio || p.price || 0)
 })
 
@@ -244,7 +263,7 @@ const fullImageUrl = computed(() => {
   if (!p) return ''
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url) return p.image_url
-  return '/placeholder.png' // Imagen por defecto
+  return '/placeholder.png' 
 })
 
 const groupLimits = computed(() => {
@@ -272,7 +291,6 @@ const getGroupRequirementText = (group) => {
 }
 
 const isSelected = (mod, groupId) => {
-  // Verifica si está en selectedAdditions
   return !!selectedAdditions.value[mod.modificadorseleccion_id]
 }
 
@@ -283,12 +301,9 @@ const groupCount = (groupId) => {
 
 const calculateTotal = () => {
   let total = finalPrice.value * quantity.value
-  
-  // Sumar modificadores
   Object.values(selectedAdditions.value).forEach(item => {
     total += Number(item.modificadorseleccion_precio || 0) * Number(item.modificadorseleccion_cantidad || 1) * quantity.value
   })
-  
   return total
 }
 
@@ -296,13 +311,11 @@ const calculateTotal = () => {
 const handleRowClick = (mod, groupId) => {
   const limits = groupLimits.value[String(groupId)]
   
-  // Si es radio button (no multiple)
   if (!limits.multiple) {
     handleAdditionChange(mod, groupId)
     return
   }
   
-  // Si es checkbox (click togglea)
   const isChecked = checkedAddition.value[mod.modificadorseleccion_id]
   checkedAddition.value[mod.modificadorseleccion_id] = !isChecked
   handleAdditionChange(mod, groupId)
@@ -313,16 +326,13 @@ const handleAdditionChange = (item, groupId) => {
   const limits = groupLimits.value[key]
   
   if (!limits.multiple) {
-    // Radio logic
     Object.keys(selectedAdditions.value).forEach((k) => {
       if (selectedAdditions.value[k].modificador_id === groupId) delete selectedAdditions.value[k]
     })
     exclusive.value[groupId] = item.modificadorseleccion_id
     selectedAdditions.value[item.modificadorseleccion_id] = { ...item, modificadorseleccion_cantidad: 1, modificador_id: groupId }
   } else {
-    // Checkbox logic
     if (checkedAddition.value[item.modificadorseleccion_id]) {
-      // Activar
       if (limits.max > 0 && groupCount(key) + 1 > limits.max) {
         checkedAddition.value[item.modificadorseleccion_id] = false
         showToast({ title: 'Límite alcanzado', message: `Máximo ${limits.max} opciones`, severity: 'warn' })
@@ -330,12 +340,7 @@ const handleAdditionChange = (item, groupId) => {
       }
       selectedAdditions.value[item.modificadorseleccion_id] = { ...item, modificadorseleccion_cantidad: 1, modificador_id: groupId }
     } else {
-      // Desactivar
       delete selectedAdditions.value[item.modificadorseleccion_id]
-      if (limits.min > 0 && groupCount(key) < limits.min) {
-        // Revertir si rompe mínimo (opcional, a veces se permite desmarcar y validar al final)
-         // showToast({ title: 'Mínimo requerido', message: `Mínimo ${limits.min}`, severity: 'warn' })
-      }
     }
   }
 }
@@ -355,7 +360,6 @@ const decrement = (item, groupId) => {
   if (entry.modificadorseleccion_cantidad > 1) {
     entry.modificadorseleccion_cantidad--
   } else {
-    // Remover item
     checkedAddition.value[item.modificadorseleccion_id] = false
     delete selectedAdditions.value[item.modificadorseleccion_id]
   }
@@ -377,13 +381,11 @@ const selectAlternative = (option) => {
     producto_cambio_id: current.producto_id
   }
   
-  // Intercambio en la lista local
   const list = current.lista_productoCambio || []
   const idx = list.findIndex(i => i.producto_id === option.producto_id)
   if (idx !== -1) list.splice(idx, 1, backup)
   else list.push(backup)
 
-  // Actualizar el objeto actual
   Object.assign(current, {
     producto_id: option.producto_id,
     producto_descripcion: option.producto_descripcion,
@@ -426,7 +428,6 @@ const goToRelative = (step) => {
 const goToNext = () => goToRelative(1)
 const goToPrev = () => goToRelative(-1)
 
-// Reset state on change
 watch(currentProduct, (newVal) => {
   if(newVal) {
     quantity.value = 1
@@ -434,11 +435,9 @@ watch(currentProduct, (newVal) => {
     checkedAddition.value = {}
     exclusive.value = {}
     
-    // Auto-select minimums (Opcional, lógica simplificada aquí)
     newVal.lista_agrupadores?.forEach(g => {
         const lim = groupLimits.value[String(g.modificador_id)]
         if(lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
-            // Seleccionar el primero por defecto si es obligatorio y único
             handleAdditionChange(g.listaModificadores[0], g.modificador_id)
         }
     })
@@ -452,14 +451,23 @@ useHead({
 
 <style scoped>
 /* --- VARIABLES --- */
-
+/* Asegúrate de tener estas variables en tu CSS global o definirlas aquí */
+/* :root {
+  --bg-page: #f9fafb;
+  --text-main: #1f2937;
+  --text-light: #6b7280;
+  --border: #e5e7eb;
+  --primary: #dc2626;
+  --primary-dark: #b91c1c;
+}
+*/
 
 .page-wrapper {
-  background-color: var(--bg-page);
+  background-color: var(--bg-page, #f9fafb);
   min-height: 100vh;
-  padding-bottom: 90px; /* Espacio para el footer */
+  padding-bottom: 90px;
   font-family: 'Roboto', sans-serif;
-  color: var(--text-main);
+  color: var(--text-main, #1f2937);
 }
 
 /* --- NAVEGACIÓN FLOTANTE --- */
@@ -467,7 +475,7 @@ useHead({
   position: fixed;
   z-index: 50;
   background: white;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border, #e5e7eb);
   box-shadow: 0 4px 6px rgba(0,0,0,0.05);
   border-radius: 50%;
   width: 40px;
@@ -477,7 +485,7 @@ useHead({
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  color: var(--text-main);
+  color: var(--text-main, #1f2937);
 }
 .nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
 .nav-btn--back { top: 1rem; left: 1rem; }
@@ -492,7 +500,7 @@ useHead({
 
 @media (min-width: 1024px) {
   .product-container {
-    grid-template-columns: 1fr 1fr; /* Mitad y mitad */
+    grid-template-columns: 1fr 1fr;
     gap: 40px;
     padding: 40px;
     align-items: start;
@@ -508,14 +516,15 @@ useHead({
   background: white;
   width: 100%;
 }
+
+/* Ajuste NuxtImg */
 .main-image {
   width: 100%;
-  aspect-ratio: 4/4; /* O 1/1 según prefieras */
+  aspect-ratio: 4/4; 
   object-fit: cover;
   display: block;
 }
 
-/* En Desktop la imagen se fija al hacer scroll */
 @media (min-width: 1024px) {
   .image-wrapper {
     position: sticky;
@@ -530,7 +539,7 @@ useHead({
 }
 
 .desktop-nav-controls {
-  display: none; /* Oculto en móvil */
+  display: none;
 }
 @media (min-width: 1024px) {
   .desktop-nav-controls {
@@ -541,7 +550,7 @@ useHead({
     width: 100%;
     transform: translateY(-50%);
     padding: 0 10px;
-    pointer-events: none; /* Para que clicks pasen si no es botón */
+    pointer-events: none;
   }
   .nav-arrow {
     pointer-events: auto;
@@ -590,23 +599,23 @@ useHead({
 .price-current {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--primary, #dc2626);
 }
 .price-old {
   font-size: 1rem;
   text-decoration: line-through;
-  color: var(--text-light);
+  color: var(--text-light, #6b7280);
 }
 
 .product-description {
-  color: var(--text-light);
+  color: var(--text-light, #6b7280);
   font-size: 0.95rem;
   line-height: 1.5;
 }
 
 .divider {
   border: 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border, #e5e7eb);
   margin: 1.5rem 0;
 }
 
@@ -647,16 +656,25 @@ useHead({
   align-items: center;
   gap: 10px;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 12px;
   background: white;
 }
-.base-item-img img {
+.base-item-img {
   width: 50px;
   height: 50px;
   border-radius: 8px;
-  object-fit: cover;
+  overflow: hidden; 
+  flex-shrink: 0;
 }
+/* Al usar NuxtImg a veces el img pierde el display block por defecto */
+.base-item-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block; 
+}
+
 .base-item-info {
   flex: 1;
 }
@@ -696,7 +714,7 @@ useHead({
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 12px;
   background: white;
   cursor: pointer;
@@ -706,25 +724,24 @@ useHead({
   border-color: #ccc;
 }
 .modifier-row.is-selected {
-  border-color: var(--primary);
-  background-color: #fff5f5; /* Tinte rojo muy suave */
+  border-color: var(--primary, #dc2626);
+  background-color: #fff5f5;
 }
 
-/* Custom Checkbox/Radio CSS only */
 .custom-check {
   width: 20px;
   height: 20px;
   border: 2px solid #ccc;
-  border-radius: 4px; /* Checkbox */
+  border-radius: 4px;
   position: relative;
   transition: all 0.2s;
 }
 .custom-check.type-radio {
-  border-radius: 50%; /* Radio */
+  border-radius: 50%;
 }
 .custom-check.checked {
-  background-color: var(--primary);
-  border-color: var(--primary);
+  background-color: var(--primary, #dc2626);
+  border-color: var(--primary, #dc2626);
 }
 .custom-check.checked::after {
   content: '';
@@ -733,7 +750,7 @@ useHead({
   transform: translate(-50%, -50%);
   width: 8px; height: 8px;
   background: white;
-  border-radius: 1px; /* Para check */
+  border-radius: 1px;
 }
 .custom-check.type-radio.checked::after {
   border-radius: 50%;
@@ -749,14 +766,14 @@ useHead({
 .modifier-price {
   font-weight: 600;
   font-size: 0.9rem;
-  color: var(--text-light);
+  color: var(--text-light, #6b7280);
 }
 
 .modifier-qty-control {
   display: flex;
   align-items: center;
   background: white;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -809,7 +826,7 @@ useHead({
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-main);
+  color: var(--text-main, #1f2937);
 }
 .qty-val-main {
   width: 30px;
@@ -820,7 +837,7 @@ useHead({
 
 .add-cart-btn {
   flex: 1;
-  background: var(--primary);
+  background: var(--primary, #dc2626);
   color: white;
   border: none;
   border-radius: 12px;
@@ -831,7 +848,7 @@ useHead({
   transition: background 0.2s;
 }
 .add-cart-btn:hover {
-  background: var(--primary-dark);
+  background: var(--primary-dark, #b91c1c);
 }
 .btn-content {
   display: flex;
@@ -898,10 +915,14 @@ useHead({
   transition: transform 0.1s;
 }
 .option-card:hover { transform: scale(1.03); border-color: #ccc; }
+
+/* Ajuste imagen modal NuxtImg */
 .option-card img {
-  width: 80px; height: 80px;
+  width: 80px !important; 
+  height: 80px !important;
   object-fit: contain;
   margin-bottom: 8px;
+  display: block;
 }
 .option-card span {
   font-size: 0.85rem;
@@ -915,7 +936,7 @@ useHead({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-light);
+  color: var(--text-light, #6b7280);
   gap: 10px;
 }
 .spin-icon {
