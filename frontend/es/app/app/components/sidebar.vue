@@ -19,7 +19,7 @@ const menus = computed(() => {
     { label: t.sedes || 'Sedes', to: `/sedes` },
     { label: t.carta || 'Carta', to: `/carta` },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` },
-    { label: t.franquicias || 'Franquicias', to: `/franquicias` },
+    // { label: t.franquicias || 'Franquicias', to: `/franquicias` },
     { label: t.ayuda || 'Ayuda', to: `/pqr` },
     { label: t.colaboraciones || 'Colaboraciones', to: `/colaboraciones` },
       { label: t.sonando || 'Sonando', to: `/sonando` }
@@ -112,7 +112,12 @@ const handleScroll = () => {
 /* ✅ detectar si estamos en /carta (o debajo) */
 const isCartaRoute = computed(() => {
   const path = route.path || ''
-  return ['/carta', '/cart' , '/sedes' ,'/franquicias', '/colaboraciones', '/sonando'].includes(path) || path.startsWith('/carta/')
+  
+  // Lista de textos a buscar
+  const keywords = ['/carta', '/cart', '/sedes', '/franquicias', '/colaboraciones', '/sonando', '/producto']
+
+  // .some() devuelve true si AL MENOS UNO de los elementos cumple la condición
+  return keywords.some(keyword => path.includes(keyword))
 })
 
 /* 🔒 al entrar a /carta, arrancar con sidebar cerrada */

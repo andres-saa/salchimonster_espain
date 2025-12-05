@@ -1,205 +1,207 @@
 <template>
   <div class="main-container">
+    <h1 class="sr-only">Nuestras Sedes Salchimonster</h1>
+
     <div class="container">
-      <div
-        v-for="sede in sedes.filter(s => s.city_id && s.show_on_web && !s.comming_soon && s.time_zone == 'Europe/Madrid' && s.site_id !== 32)"
+      <article
+        v-for="sede in filteredSedes"
         :key="sede.site_id"
         class="sede-card"
         @click="openSedeDialog(sede)"
+        itemscope
+        itemtype="https://schema.org/Restaurant"
       >
-        <div class="sede-image-container">
+        <div class="sede-image-wrapper">
           <img
             :src="currentImage(sede)"
             @load="loadHighResImage(sede)"
             @error="onImgError(sede)"
             class="sede-image"
-            alt=""
+            :alt="`Fachada Restaurante Salchimonster ${sede.site_name} en ${cityName(sede.city_id)}`"
+            itemprop="image"
           />
-          <div class="sede-details">
-            <p class="sede-location">
-              <span class="sede-icon">
-                <Icon name="mdi:map-marker" class="nuxt-icon" />
-              </span>
-              {{ cityName(sede.city_id) }}
-              <span class="sede-address">{{ sede.site_address }}</span>
-            </p>
-
-            <p class="sede-name">SALCHIMONSTER {{ sede.site_name }}</p>
-
-            <!-- Teléfono: link directo a WhatsApp -->
+          
+          <div class="map-floating-btn" @click.stop>
             <a
-              v-if="waLink(sede)"
-              :href="waLink(sede)"
+              :href="sede.maps"
               target="_blank"
-              rel="noopener"
-              class="sede-phone"
-              :aria-label="`Chatear por WhatsApp con ${sede.site_name}`"
-              @click.stop
+              rel="noopener noreferrer"
+              :aria-label="`Ver ubicación de ${sede.site_name} en Google Maps`"
             >
-              <span class="sede-icon">
-                <Icon name="mdi:whatsapp" class="nuxt-icon whatsapp-icon" />
-              </span>
-              {{ displayPhone(sede.site_phone) }}
+               <Icon name="mdi:google-maps" class="map-icon" />
             </a>
-            <p v-else class="sede-phone">
-              <span class="sede-icon">
-                <Icon name="mdi:whatsapp" class="nuxt-icon whatsapp-icon" />
-              </span>
-              {{ displayPhone(sede.site_phone) }}
-            </p>
+          </div>
 
-            <div class="maps-icon">
+          <div class="sede-overlay">
+            <div class="sede-info">
+              <p class="sede-location">
+                <Icon name="mdi:map-marker" class="icon-small" />
+                {{ cityName(sede.city_id) }}
+              </p>
+              
+              <h3 class="sede-name" itemprop="name">
+                SALCHIMONSTER {{ sede.site_name }}
+              </h3>
+
+              <address class="sede-address" itemprop="address">
+                {{ sede.site_address }}
+              </address>
+
               <a
-                :href="sede.maps"
+                v-if="waLink(sede)"
+                :href="waLink(sede)"
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
+                class="sede-action-link"
                 @click.stop
               >
-                <img
-                  class="maps-image"
-                  src="https://th.bing.com/th/id/R.68201495ac2d0c4d1cd3cbf6d25f6755?rik=l%2bilUrRDF30tdw&pid=ImgRaw&r=0"
-                  alt="Map icon"
-                />
+                <Icon name="mdi:whatsapp" class="whatsapp-icon" />
+                <span itemprop="telephone">{{ displayPhone(sede.site_phone) }}</span>
+              </a>
+              <p v-else class="sede-phone-text">
+                <Icon name="mdi:whatsapp" class="whatsapp-icon" />
+                <span>{{ displayPhone(sede.site_phone) }}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <Transition name="fade">
+      <div
+        v-if="showDialog && selectedSede"
+        class="dialog-overlay"
+        @click.self="closeDialog"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="dialog">
+          <button class="dialog-close" @click="closeDialog" aria-label="Cerrar ventana">
+            <Icon name="mdi:close" />
+          </button>
+
+          <h2 class="dialog-title">
+            SALCHIMONSTER {{ selectedSede.site_name }}
+          </h2>
+
+          <div class="dialog-content">
+            <div class="dialog-row">
+              <Icon name="mdi:map-marker" class="dialog-icon" />
+              <span>{{ cityName(selectedSede.city_id) }}</span>
+            </div>
+
+            <div class="dialog-row">
+              <span class="dialog-label">Dirección:</span>
+              <span class="dialog-value">{{ selectedSede.site_address }}</span>
+            </div>
+
+            <div class="dialog-row">
+              <span class="dialog-label">Teléfono:</span>
+              <a
+                v-if="waLink(selectedSede)"
+                :href="waLink(selectedSede)"
+                target="_blank"
+                rel="noopener"
+                class="dialog-link"
+              >
+                {{ displayPhone(selectedSede.site_phone) }}
+              </a>
+              <span v-else>{{ displayPhone(selectedSede.site_phone) }}</span>
+            </div>
+
+            <div class="dialog-action" v-if="selectedSede.maps">
+              <a
+                :href="selectedSede.maps"
+                target="_blank"
+                rel="noopener"
+                class="btn-maps"
+              >
+                <Icon name="mdi:google-maps" />
+                Abrir en Google Maps
               </a>
             </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- DIALOGO DE SEDE -->
-    <div
-      v-if="showDialog && selectedSede"
-      class="dialog-overlay"
-      @click.self="closeDialog"
-    >
-      <div class="dialog">
-        <button class="dialog-close" @click="closeDialog" aria-label="Cerrar">
-          ×
-        </button>
-
-        <h2 class="dialog-title">
-          SALCHIMONSTER {{ selectedSede.site_name }}
-        </h2>
-
-        <p class="dialog-row">
-          <span class="dialog-icon">
-            <Icon name="mdi:map-marker" class="nuxt-icon" />
-          </span>
-          {{ cityName(selectedSede.city_id) }}
-        </p>
-
-        <p class="dialog-row">
-          <span class="dialog-label">Dirección:</span>
-          <span>{{ selectedSede.site_address }}</span>
-        </p>
-
-        <p class="dialog-row">
-          <span class="dialog-label">Teléfono:</span>
-          <a
-            v-if="waLink(selectedSede)"
-            :href="waLink(selectedSede)"
-            target="_blank"
-            rel="noopener"
-            class="dialog-link"
-          >
-            {{ displayPhone(selectedSede.site_phone) }}
-          </a>
-          <span v-else>{{ displayPhone(selectedSede.site_phone) }}</span>
-        </p>
-
-        <p class="dialog-row" v-if="selectedSede.maps">
-          <span class="dialog-label">Ver en mapa:</span>
-          <a
-            :href="selectedSede.maps"
-            target="_blank"
-            rel="noopener"
-            class="dialog-link"
-          >
-            Abrir en Google Maps
-          </a>
-        </p>
-      </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
-
-
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
+import { useHead } from '#imports' // Asegúrate de que esto funcione en tu versión de Nuxt
 import { URI } from '@/service/conection'
 
-// Cache en memoria de la URL actual de cada sede
+// --- State ---
+const sedes = ref([])
+const cities = ref([])
 const imgCache = ref({})
+const showDialog = ref(false)
+const selectedSede = ref(null)
 
-// 🔥 Sólo este endpoint
+const FALLBACK_IMG = 'https://gestion.salchimonster.com/images/logo.png'
+
+// --- Computed Filter (Mejora de performance) ---
+const filteredSedes = computed(() => {
+  return sedes.value.filter(s => 
+    s.city_id && 
+    s.show_on_web && 
+    !s.comming_soon && 
+    s.time_zone === 'Europe/Madrid' && 
+    s.site_id !== 32
+  )
+})
+
+// --- Image Logic ---
 const byImgId = (img_id) => `${URI}/read-photo-product/${img_id}`
 
-// Imagen de fallback si no hay img_id o falla la carga
-const FALLBACK_IMG =
-  'https://gestion.salchimonster.com/images/logo.png'
-
-// Devuelve la URL actual a mostrar para la sede
 const currentImage = (sede) => {
   if (imgCache.value[sede.site_id]) return imgCache.value[sede.site_id]
-
   if (sede?.img_id) {
     imgCache.value[sede.site_id] = byImgId(sede.img_id)
   } else {
     imgCache.value[sede.site_id] = FALLBACK_IMG
   }
-
   return imgCache.value[sede.site_id]
 }
 
-// Ya no hay “low/high res”: solo aseguramos que la que tenemos carga
 const loadHighResImage = (sede) => {
   if (!sede?.img_id) return
   const url = byImgId(sede.img_id)
   const probe = new Image()
   probe.src = url
-  probe.onload = () => {
-    imgCache.value[sede.site_id] = url
-  }
+  probe.onload = () => { imgCache.value[sede.site_id] = url }
 }
 
-// Fallback si <img> falla
 const onImgError = (sede) => {
   imgCache.value[sede.site_id] = FALLBACK_IMG
 }
 
-// ------------------ Datos ------------------
-// El resto de tu lógica queda igual
-const sedes  = ref([])
-const cities = ref([])
-
+// --- Data Fetching ---
 const getSites = async () => {
   try {
-    const response = await fetch(`${URI}/sites`)
-    if (response.ok) return await response.json()
-  } catch (error) {
-    console.error('Error fetching sites:', error)
-  }
+    const res = await fetch(`${URI}/sites`)
+    if (res.ok) return await res.json()
+  } catch (e) { console.error(e) }
   return []
 }
 
 const getCities = async () => {
   try {
-    const response = await fetch(`${URI}/cities`)
-    if (response.ok) return await response.json()
-  } catch (error) {
-    console.error('Error fetching cities:', error)
-  }
+    const res = await fetch(`${URI}/cities`)
+    if (res.ok) return await res.json()
+  } catch (e) { console.error(e) }
   return []
 }
 
 onMounted(async () => {
-  sedes.value = await getSites()
-  cities.value = await getCities()
+  const [sitesData, citiesData] = await Promise.all([getSites(), getCities()])
+  sedes.value = sitesData
+  cities.value = citiesData
 })
 
-// ------------------ Utils ------------------
+// --- Utils ---
 const cityName = (city_id) => {
   const c = cities.value.find(s => s.city_id === city_id)
   return c?.city_name ?? ''
@@ -218,226 +220,319 @@ const toE164CO = (raw = '') => {
 const waLink = (sede) => {
   const num = toE164CO(sede?.site_phone || '')
   if (!num) return ''
-  const msg = `Hola, quiero más información sobre SALCHIMONSTER ${sede?.site_name ?? ''} en ${cityName(sede?.city_id)}.`
+  const msg = `Hola, quiero más info sobre SALCHIMONSTER ${sede?.site_name ?? ''} en ${cityName(sede?.city_id)}.`
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
 }
 
-// ------------------ Dialog ------------------
-const showDialog = ref(false)
-const selectedSede = ref(null)
-
+// --- Dialog Logic ---
 const openSedeDialog = (sede) => {
   selectedSede.value = sede
   showDialog.value = true
 }
-
 const closeDialog = () => {
   showDialog.value = false
   selectedSede.value = null
 }
+
+// --- SEO: Structured Data (JSON-LD) ---
+// Esto inyecta un script en el head para que Google entienda que son negocios locales
+useHead(() => {
+  const structuredData = filteredSedes.value.map(sede => ({
+    "@context": "https://schema.org",
+    "@type": "Restaurant",
+    "name": `Salchimonster ${sede.site_name}`,
+    "image": sede.img_id ? byImgId(sede.img_id) : FALLBACK_IMG,
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": sede.site_address,
+      "addressLocality": cityName(sede.city_id),
+      "addressCountry": "ES" // Asumo España por 'Europe/Madrid'
+    },
+    "telephone": sede.site_phone,
+    "url": sede.maps
+  }))
+
+  return {
+    script: [
+      {
+        type: 'application/ld+json',
+        children: JSON.stringify(structuredData)
+      }
+    ]
+  }
+})
 </script>
 
-
-
-
 <style scoped>
-.main-container {
-  position: relative;
+/* Variables para consistencia */
+:root {
+  --primary:var(--primary-color);
+  --dark-bg: #1a1a1a;
+  --text-white: #ffffff;
+  --overlay-gradient: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.main-container {
+  width: 100%;
+  padding-bottom: 3rem;
 }
 
 .container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
+  /* Grid responsivo moderno: columnas de min 320px */
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 2rem;
+  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
-  max-width: 1600px;
   padding: 2rem;
-  padding-top: 2rem;
 }
 
+/* Card Styles */
 .sede-card {
-  border-radius: 0.5rem;
+  position: relative;
+  border-radius: 1rem;
   overflow: hidden;
-  max-width: 50%;
   cursor: pointer;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  background-color: #000;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), 
+              box-shadow 0.3s ease;
 }
 
 .sede-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+  transform: translateY(-8px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6);
 }
 
-.sede-image-container {
+.sede-image-wrapper {
   position: relative;
-  height: min-content;
-  box-shadow: 0 0 10px black;
-  border-radius: 0.5rem;
+  width: 100%;
+  /* Aspect Ratio vertical para fotos de sedes (estilo Instagram Story/TikTok) */
+  aspect-ratio: 3/4; 
 }
 
 .sede-image {
   width: 100%;
-  height: 30rem;
+  height: 100%;
   object-fit: cover;
-  border-radius: 0.5rem;
-  transition: opacity 0.5s ease-in-out, transform 0.3s ease-in-out,
-    filter 0.3s ease-in-out;
+  transition: transform 0.5s ease;
 }
 
 .sede-card:hover .sede-image {
- 
-  filter: brightness(1.05);
+  transform: scale(1.05);
 }
 
-.sede-details {
+/* Mapa Flotante (Mejorado) */
+.map-floating-btn {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 40%;
-  background: linear-gradient(to top, black, transparent);
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.map-floating-btn:hover {
+  background: #fff;
+  transform: scale(1.1);
+}
+
+.map-icon {
+  font-size: 1.5rem;
+  color: #333;
+}
+
+/* Overlay de información */
+.sede-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-gradient, linear-gradient(to top, rgba(0,0,0,0.95), transparent));
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 1rem;
-  border-radius: 0 0 0.5rem 0.5rem;
-  transition: background 0.3s ease;
+  padding: 1.5rem;
 }
 
-.sede-card:hover .sede-details {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.95), transparent);
-}
-
-.sede-location,
-.sede-phone {
+.sede-info {
   color: white;
-  font-size: 1rem;
+  transform: translateY(0);
+  transition: transform 0.3s ease;
 }
 
 .sede-location {
-  font-weight: bold;
-  color: var(--primary-color);
-}
-
-.sede-address {
-  font-weight: normal;
-  color: white;
-  padding-left: 1rem;
+  color:var(--primary-color); /* Color primario */
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .sede-name {
-  color: white;
-  font-weight: bold;
-  margin-top: 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.2;
 }
 
-.sede-phone {
+.sede-address {
+  font-style: normal;
+  font-size: 0.95rem;
+  opacity: 0.9;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+/* WhatsApp Link */
+.sede-action-link,
+.sede-phone-text {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(4px);
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  color: white;
   text-decoration: none;
   font-weight: 600;
-  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  transition: background 0.2s ease;
 }
 
-.sede-phone .sede-icon {
-  font-weight: bold;
+.sede-action-link:hover {
+  background: rgba(37, 211, 102, 0.2); /* Tinte verde WA */
+  color: #4ade80;
 }
 
-/* Nuxt Icon genérico */
-.nuxt-icon {
-  display: inline-block;
-  font-size: 1.3rem;
-  vertical-align: middle;
-}
-
-/* Color verde para WhatsApp */
 .whatsapp-icon {
-  color: rgb(58, 255, 58);
+  color: #4ade80;
+  font-size: 1.2rem;
 }
 
-/* Icono de maps */
-.maps-icon {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 5rem;
-  height: 5rem;
-  background-color: transparent;
-  display: flex;
-  padding: 1rem;
-  align-items: center;
-  justify-content: center;
-}
-
-.maps-nuxt-icon {
-  font-size: 2.3rem;
-  color: white;
-}
-
-.maps-image {
-  width: 100%;
-  height: 100%;
-  border-radius: 0.5rem;
-  background-color: rebeccapurple;
-}
-
-/* -------- Dialog styles -------- */
+/* --- Dialog Styles --- */
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  padding: 1rem;
 }
 
 .dialog {
-  background: #111;
-  color: #fff;
-  border-radius: 0.75rem;
-  padding: 1.5rem 1.75rem;
-  width: 90%;
-  max-width: 480px;
-  box-shadow: 0 0 25px rgba(0, 0, 0, 0.9);
+  background: #1e1e1e;
+  color: white;
+  width: 100%;
+  max-width: 500px;
+  border-radius: 1rem;
+  padding: 2rem;
   position: relative;
-}
-
-.dialog-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-}
-
-.dialog-row {
-  margin: 0.35rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
-}
-
-.dialog-label {
-  font-weight: 600;
-  min-width: 90px;
-}
-
-.dialog-link {
-  color: var(--primary-color, #ffcc00);
-  text-decoration: underline;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
 .dialog-close {
   position: absolute;
-  top: 0.4rem;
-  right: 0.6rem;
+  top: 1rem;
+  right: 1rem;
   background: transparent;
   border: none;
-  color: #fff;
+  color: white;
   font-size: 1.5rem;
   cursor: pointer;
-  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.dialog-close:hover { opacity: 1; }
+
+.dialog-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color:var(--primary-color);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 1rem;
+}
+
+.dialog-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+
+.dialog-label {
+  font-weight: 600;
+  color: #aaa;
+  min-width: 80px;
+}
+
+.dialog-link {
+  color: white;
+  text-decoration: underline;
+  text-decoration-color:var(--primary-color);
+  text-underline-offset: 3px;
+}
+
+.dialog-action {
+  margin-top: 2rem;
+}
+
+.btn-maps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.8rem;
+  background:var(--primary-color);
+  color: black;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: filter 0.2s;
+}
+
+.btn-maps:hover {
+  filter: brightness(1.1);
+}
+
+/* Transiciones Vue */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

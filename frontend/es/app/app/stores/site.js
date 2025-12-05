@@ -4,7 +4,7 @@ import { ref, watch } from 'vue'
 import { URI } from '../service/conection'
 
 export const useSitesStore = defineStore(
-  'site-d3sd422',
+  'site-d3sdd422',
   () => {
     // ───────────── STATE ─────────────
     const location = ref({
@@ -184,7 +184,7 @@ export const useSitesStore = defineStore(
   },
   {
     persist: {
-      key: 'sidte',
+      key: 'sidtest',
       paths: ['location'], // status no se persiste, siempre fresco
     },
   },

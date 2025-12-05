@@ -59,12 +59,12 @@ import { useHead, useFetch } from '#imports'
 
 const route = useRoute()
 const router = useRouter()
-
-const pe_id = 1
+const sitesStore = useSitesStore()
+ 
 
 // 📡 Traer data (Mantenemos la estructura del primero con 'key' para hidratación)
 const { data: rawCategoriesData } = useFetch(
-  () => `${URI}/tiendas/${pe_id || 1}/products`,
+  () => `${URI}/tiendas/${sitesStore?.location?.site?.site_id || 1}/products`,
   {
     key: 'menu-data', 
     default: () => ({ categorias: [] })

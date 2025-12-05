@@ -27,25 +27,14 @@ export default defineNuxtConfig({
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     },
   },
-  routeRules: {
-    '/': {
-      prerender: true,
-      swr: 300,
-    },
-    '/carta': {
-      prerender: true,
-      swr: 300,
-    },
-    '/rastrear': {
-      prerender: true,
-      swr: 300,
-    },'/horarios': {
-      prerender: true,
-      swr: 300,
-    },
-    experimental: {
-    viewTransition: true
-  },
+ 
+    routeRules: {
+    // Le dice a Nuxt: "Cualquier página vista, guárdala en caché 15 minutos".
+    // Como el subdominio es parte de la petición, Nuxt crea cachés separadas para
+    // bogota.tudominio.com y medellin.tudominio.com automáticamente.
+    '/**': { swr: 900 } 
+ 
+  
   },
   image: {
     // Dominios permitidos para optimizar

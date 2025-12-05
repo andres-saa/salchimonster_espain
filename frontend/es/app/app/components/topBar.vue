@@ -66,7 +66,7 @@ const menusAll = computed(() => {
     { label: t.sedes || 'Sedes', to: `/sedes` },
     { label: t.carta || 'Carta', to: `/carta` },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` },
-    { label: t.franquicias || 'Franquicias', to: `/franquicias` },
+    // { label: t.franquicias || 'Franquicias', to: `/franquicias` },
     { label: t.ayuda || 'Ayuda', to: `/pqr` },
     { label: t.colaboraciones || 'Colaboraciones', to: `/colaboraciones` },
     { label: t.sonando || 'Sonando', to: `/sonando` }

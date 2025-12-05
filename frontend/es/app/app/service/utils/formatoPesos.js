@@ -1,16 +1,20 @@
-// Función para formatear un número como pesos colombianos
+// Función para formatear un número como Euros
+// (Mantiene el nombre antiguo para evitar errores de importación)
 function formatoPesosColombianos(numero) {
-  return new Intl.NumberFormat('es-CO', {
+  // Usamos 'es-ES' para que el formato coincida con el estándar del Euro (1.000.000 €)
+  return new Intl.NumberFormat('es-ES', {
     style: 'currency',
-    currency: 'COP',
+    currency: 'EUR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(numero)
 }
 
 // Ejemplo de uso
-const numero = 1000000 // Este es el valor en memoria
-const numeroFormateado = formatoPesosColombianos(numero) // Formatear el número
-// console.log(numeroFormateado); // Esto mostrará "COP 1.000.000" en la consola
+const numero = 1000000
+const numeroFormateado = formatoPesosColombianos(numero)
+
+// console.log(numeroFormateado); 
+// Resultado: "1.000.000 €"
 
 export { formatoPesosColombianos }

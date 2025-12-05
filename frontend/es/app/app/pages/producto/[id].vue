@@ -473,12 +473,13 @@ useHead({
   title: computed(() => currentProduct.value ? `${displayName.value} - Menú` : 'Cargando...')
 })
 </script>
-
 <style scoped>
 .page-wrapper {
-  background-color: var(--bg-page, #f9fafb);
+  /* background-color: var(--bg-page, #f9fafb); */
   min-height: 100vh;
   padding-bottom: 90px;
+  max-width: 1300;
+  margin: auto;
   font-family: 'Roboto', sans-serif;
   color: var(--text-main, #1f2937);
   position: relative;
@@ -552,12 +553,18 @@ useHead({
     grid-template-columns: 1fr 1fr;
     gap: 40px;
     padding: 40px;
-    align-items: start;
+    /* CORRECCIÓN: Usamos stretch (por defecto) o align-items: stretch 
+       para que la columna de la galería sea tan alta como la de detalles */
+    align-items: stretch; 
   }
 }
 
 /* --- IMÁGENES (Lógica Thumbnail to Hero) --- */
-.gallery-column { width: 100%; }
+.gallery-column { 
+  width: 100%; 
+  /* Necesario para que el contenido sticky tenga espacio para moverse */
+  position: relative; 
+}
 
 .image-wrapper {
   position: relative;
@@ -584,7 +591,6 @@ useHead({
 /* La imagen caché (baja res) está abajo */
 .img-preview {
   z-index: 1;
-  /* Sin blur para que se vea nítida desde el frame 0 */
 }
 
 /* La imagen HD está encima, invisible al inicio */
@@ -599,9 +605,11 @@ useHead({
 
 @media (min-width: 1024px) {
   .image-wrapper {
+    /* CORRECCIÓN: Sticky activo */
     position: sticky;
-    top: 40px;
+    top: 40px; /* Espacio desde el borde superior de la ventana */
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    z-index: 10;
   }
 }
 

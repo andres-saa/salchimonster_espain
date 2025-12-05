@@ -40,9 +40,9 @@ const normalizeSpaces = (str) =>
 const currentLang = computed(() => (props.lang || 'es').toLowerCase())
 
 const formatCOP = (value) =>
-  new Intl.NumberFormat('es-CO', {
+  new Intl.NumberFormat('es-ES', { // Cambiamos es-CO por es-ES
     style: 'currency',
-    currency: 'COP',
+    currency: 'EUR',
     maximumFractionDigits: 0
   }).format(Number(value || 0))
 
@@ -165,28 +165,22 @@ onBeforeUnmount(() => {
     @keyup="handleKeyUp"
   >
     <div class="menu-product-card__image-wrapper">
-      <NuxtImg
-        class="menu-product-card__image"
-        :src="fullImageUrl"
-        :alt="displayName"
-        loading="lazy"
-        format="webp"
-        quality="80"
-        fit="cover"
-        width="300" 
-        height="300"
-        sizes="150px md:250px lg:300px"
-        placeholder
-      />
+    <NuxtImg
+      class="menu-product-card__image"
+      :src="fullImageUrl"
+      :alt="displayName"
+      loading="lazy"
+      format="webp"
+      quality="80"
+      fit="cover"
+      width="300" 
+      height="300"
+      placeholder
       
-      <button
-        type="button"
-        class="menu-product-card__add-btn"
-        @click.stop="handleAddToCart"
-        aria-label="Agregar al carrito"
-      >
-        +
-      </button>
+      :style="{ viewTransitionName: `product-image-${props.product.id}` }"
+    />
+      
+   
     </div>
 
     <div class="menu-product-card__body">

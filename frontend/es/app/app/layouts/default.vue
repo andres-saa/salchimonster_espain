@@ -16,11 +16,11 @@
     >
       <div style="position: fixed;left: 0;top: 0;z-index: -1;">
         <div style="width: 100vw;height: 100vh;"></div>
-        <img
+        <!-- <img
           style="position: fixed;left: 0;top: 0; width: 100vw;z-index: -1;opacity: .2;height: 100vh;object-fit: cover;filter: blur(10px)"
           src="https://niceeat.co/files/tn/1666829837_301691710_1158873957998851_8576388724181114818_n.jpg"
           alt=""
-        />
+        /> -->
       </div>
 
       <aside
@@ -88,7 +88,12 @@ const handleScroll = () => {
 /* ✅ detectar si estamos en /carta (o subrutas) */
 const isCartaRoute = computed(() => {
   const path = route.path || ''
-  return ['/carta', '/cart', '/sedes', '/franquicias', '/colaboraciones', '/sonando'].includes(path) || path.startsWith('/carta/')
+  
+  // Lista de textos a buscar
+  const keywords = ['/carta', '/cart', '/sedes', '/franquicias', '/colaboraciones', '/sonando', '/producto']
+
+  // .some() devuelve true si AL MENOS UNO de los elementos cumple la condición
+  return keywords.some(keyword => path.includes(keyword))
 })
 
 onMounted(() => {
