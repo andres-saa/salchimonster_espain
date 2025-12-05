@@ -28,14 +28,7 @@ export default defineNuxtConfig({
     },
   },
  
-    routeRules: {
-    // Le dice a Nuxt: "Cualquier página vista, guárdala en caché 15 minutos".
-    // Como el subdominio es parte de la petición, Nuxt crea cachés separadas para
-    // bogota.tudominio.com y medellin.tudominio.com automáticamente.
-    '/**': { swr: 900 } 
  
-  
-  },
   image: {
     // Dominios permitidos para optimizar
     domains: ['img.restpe.com'], 

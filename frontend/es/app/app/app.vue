@@ -1,64 +1,47 @@
+<template>
+  <div>
+    <NuxtLayout>
+      <NuxtPage />
+    </NuxtLayout>
+
+    <ToastContainer />
+    <siteDialog />
+    <CartBar />
+  </div>
+</template>
+
 <script setup>
- 
 import { onMounted } from '#imports'
 import { useSitesStore } from '#imports'
 import { useSedeFromSubdomain } from '#imports'
 import { URI } from './service/conection'
 
 const siteStore = useSitesStore()
+const sede = useSedeFromSubdomain()
 
-// 1. Detectar subdominio (Funciona en Servidor y Cliente)
-// Necesitamos una función que lea el host header en el server o window en el cliente
-const getSubdomain = () => {
-  if (import.meta.server) {
-    // ESTAMOS EN EL SERVIDOR
-    const event = useRequestEvent()
-    const host = event?.node?.req?.headers?.host || ''
-    // host es tipo "bogota.tudominio.com". Extraemos el primer segmento.
-    return host.split('.')[0]
-  } else {
-    // ESTAMOS EN EL CLIENTE
-    return window.location.hostname.split('.')[0]
-  }
-}
+onMounted(async () => {
+  try {
+    // Por si useSedeFromSubdomain devuelve un ref
+    const currentSede = typeof sede === 'string' ? sede : sede?.value
+    if (!currentSede) return
 
-const currentSede = getSubdomain()
+    const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
 
-// 2. Fetch INTELIGENTE (Se ejecuta en servidor y el estado viaja al cliente)
-// Usamos useAsyncData para bloquear la carga hasta tener la info
-const { data: siteData, error } = await useAsyncData(
-  `site-info-${currentSede}`, // Key única por sede
-  () => $fetch(`${URI}/sites/subdomain/${currentSede}`)
-)
+    if (!response.ok) {
+      throw new Error(`Error HTTP ${response.status}`)
+    }
 
-// 3. Guardar en el Store inmediatamente
-if (siteData.value && siteData.value[0]) {
-  siteStore.location.site = siteData.value[0]
-}
+    const data = await response.json()
 
-// 4. Manejo de estado (Opcional, pero recomendado)
-// Si necesitas el watcher de status, ese sí puede ir en onMounted
-// porque es lógica "viva" del cliente.
-onMounted(() => {
-  if (siteStore.location.site) {
+ 
+
+    // Guarda la data de la sede en el store
+    siteStore.location.site = data?.[0]
+     
     siteStore.initStatusWatcher()
+  } catch (err) {
+    console.error('Error cargando sede desde subdominio:', err)
+    // Aquí podrías lanzar un toast si tienes algo tipo useToast()
   }
 })
 </script>
-
-<template>
-  <div>
-    <div v-if="!siteStore.location.site" class="loading-screen">
-      Cargando restaurante...
-    </div>
-
-    <div v-else>
-      <NuxtLayout>
-        <NuxtPage />
-      </NuxtLayout>
-      <ToastContainer />
-      <siteDialog />
-      <CartBar />
-    </div>
-  </div>
-</template>
