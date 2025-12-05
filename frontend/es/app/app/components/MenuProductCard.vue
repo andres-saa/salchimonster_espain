@@ -40,7 +40,7 @@ const normalizeSpaces = (str) =>
 const currentLang = computed(() => (props.lang || 'es').toLowerCase())
 
 const formatCOP = (value) =>
-  new Intl.NumberFormat('es-ES', { // Cambiamos es-CO por es-ES
+  new Intl.NumberFormat('es-ES', { 
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: 0
@@ -165,22 +165,16 @@ onBeforeUnmount(() => {
     @keyup="handleKeyUp"
   >
     <div class="menu-product-card__image-wrapper">
-    <NuxtImg
-      class="menu-product-card__image"
-      :src="fullImageUrl"
-      :alt="displayName"
-      loading="lazy"
-      format="webp"
-      quality="80"
-      fit="cover"
-      width="300" 
-      height="300"
-      placeholder
-      
-      :style="{ viewTransitionName: `product-image-${props.product.id}` }"
-    />
-      
-   
+      <NuxtImg
+        class="menu-product-card__image"
+        :src="fullImageUrl"
+        :alt="displayName"
+        width="300"
+        height="300"
+        fit="cover"
+        loading="lazy"
+        format="webp"
+      />
     </div>
 
     <div class="menu-product-card__body">
@@ -241,7 +235,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Tus estilos originales se mantienen exactamente igual */
 .menu-product-card {
   background: #ffffff;
   border-radius: 0.3rem;
@@ -280,8 +273,6 @@ onBeforeUnmount(() => {
   background: #f3f4f6;
 }
 
-/* Ajuste importante: NuxtImg a veces genera spans wrappers si usas placeholders, 
-   pero aplicando la clase a la imagen debería funcionar directo */
 .menu-product-card__image {
   width: 100%;
   height: 100%;
@@ -307,7 +298,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
-  z-index: 2; /* Asegurar que esté sobre la imagen */
+  z-index: 2;
 }
 
 .menu-product-card__add-btn:hover {
