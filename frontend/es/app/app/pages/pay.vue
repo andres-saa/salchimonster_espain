@@ -1,6 +1,6 @@
 <template>
 <div>
- <payBarrios></payBarrios>
+ <!-- <payBarrios></payBarrios> -->
  <payGoogle></payGoogle>
 
 </div>

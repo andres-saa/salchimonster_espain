@@ -7,7 +7,7 @@
     <div v-if="loading" class="loading-overlay">
       <div class="spinner-container">
         <Icon name="mdi:loading" class="spin-icon" size="60" />
-        <p class="loading-text">Cargando detalles del producto...</p>
+        <p class="loading-text">Cargando detalles...</p>
       </div>
     </div>
 
@@ -15,31 +15,24 @@
       
       <div class="gallery-column">
         <div class="image-wrapper">
-          <NuxtImg 
-            :src="fullImageUrl" 
-            :alt="displayName" 
+          
+          <div v-if="!imageLoaded && !previewUrl" class="skeleton-loader"></div>
+
+          <img 
+            v-if="previewUrl"
+            :src="previewUrl" 
+            alt="" 
             class="img-preview"
-            format="webp"
-            quality="80"
-            fit="cover"
-            width="300"
-            height="300"
             aria-hidden="true"
           />
 
-          <NuxtImg 
-            :key="fullImageUrl"
-            :src="fullImageUrl" 
+          <img 
+            :src="highResUrl" 
             :alt="displayName" 
             class="img-main"
             :class="{ 'is-loaded': imageLoaded }"
+            loading="eager"
             @load="onImageLoad"
-            format="webp"
-            quality="95"
-            fit="cover"
-            width="600"
-            height="600"
-            sizes="100vw sm:500px lg:600px"
           />
           
           <div class="desktop-nav-controls">
@@ -54,7 +47,6 @@
       </div>
 
       <div class="details-column">
-        
         <header class="product-header">
           <h1 class="product-title">{{ displayName }}</h1>
           
@@ -74,7 +66,10 @@
 
         <hr class="divider" />
 
-        <section v-if="(currentProduct.lista_productobase || []).length > 0" class="section-block">
+        <section
+          v-if="(currentProduct.lista_productobase || []).length > 0"
+          class="section-block"
+        >
           <h3 class="section-title">INCLUYE</h3>
           <div class="base-products-grid">
             <div 
@@ -83,18 +78,16 @@
               class="base-item-card"
             >
               <div class="base-item-img">
-                <NuxtImg 
+                <img 
                   :src="`https://img.restpe.com/${base.producto_urlimagen}`" 
                   alt="foto" 
-                  width="100"
-                  height="100"
-                  fit="cover"
-                  format="webp"
                   loading="lazy"
                 />
               </div>
               <div class="base-item-info">
-                <div class="base-qty-badge">{{ Math.round(base.productocombo_cantidad) }}x</div>
+                <div class="base-qty-badge">
+                  {{ Math.round(base.productocombo_cantidad) }}x
+                </div>
                 <span class="base-name">{{ base.producto_descripcion }}</span>
               </div>
               <button 
@@ -140,20 +133,40 @@
               </div>
 
               <div class="modifier-info">
-                <span class="modifier-name">{{ mod.modificadorseleccion_nombre }}</span>
-                <span v-if="Number(mod.modificadorseleccion_precio) > 0" class="modifier-price">
+                <span class="modifier-name">
+                  {{ mod.modificadorseleccion_nombre }}
+                </span>
+                <span
+                  v-if="Number(mod.modificadorseleccion_precio) > 0"
+                  class="modifier-price"
+                >
                   +{{ formatoPesosColombianos(Number(mod.modificadorseleccion_precio)) }}
                 </span>
               </div>
 
               <div 
-                v-if="Number(group.modificador_esmultiple) === 1 && checkedAddition[mod.modificadorseleccion_id]" 
+                v-if="
+                  Number(group.modificador_esmultiple) === 1 &&
+                  checkedAddition[mod.modificadorseleccion_id]
+                "
                 class="modifier-qty-control"
                 @click.stop
               >
-                <button class="qty-btn-mini" @click="decrement(mod, group.modificador_id)">−</button>
-                <span class="qty-val-mini">{{ selectedAdditions[mod.modificadorseleccion_id]?.modificadorseleccion_cantidad || 1 }}</span>
-                <button class="qty-btn-mini" @click="increment(mod, group.modificador_id)">+</button>
+                <button
+                  class="qty-btn-mini"
+                  @click="decrement(mod, group.modificador_id)"
+                >
+                  −
+                </button>
+                <span class="qty-val-mini">
+                  {{ selectedAdditions[mod.modificadorseleccion_id]?.modificadorseleccion_cantidad || 1 }}
+                </span>
+                <button
+                  class="qty-btn-mini"
+                  @click="increment(mod, group.modificador_id)"
+                >
+                  +
+                </button>
               </div>
             </div>
           </div>
@@ -163,32 +176,53 @@
       </div>
     </div>
 
+    <div v-else class="product-container animate-fade-in">
+      <p style="padding: 2rem; text-align: center;">
+        No encontramos este producto en esta sede.
+      </p>
+    </div>
+
     <footer class="sticky-footer" v-if="currentProduct">
       <div class="footer-inner">
         <div class="main-qty-control">
-          <button class="qty-btn-main" @click="quantity > 1 ? quantity-- : null" :disabled="quantity <= 1">
-             <Icon name="mdi:minus" />
+          <button
+            class="qty-btn-main"
+            @click="quantity > 1 ? quantity-- : null"
+            :disabled="quantity <= 1"
+          >
+            <Icon name="mdi:minus" />
           </button>
           <span class="qty-val-main">{{ quantity }}</span>
           <button class="qty-btn-main" @click="quantity++">
-             <Icon name="mdi:plus" />
+            <Icon name="mdi:plus" />
           </button>
         </div>
 
         <button class="add-cart-btn" @click="addToCart">
           <div class="btn-content">
             <span>Agregar</span>
-            <span class="btn-total">{{ formatoPesosColombianos(calculateTotal()) }}</span>
+            <span class="btn-total">
+              {{ formatoPesosColombianos(calculateTotal()) }}
+            </span>
           </div>
         </button>
       </div>
     </footer>
 
-    <div v-if="showChangeDialog" class="modal-backdrop" @click.self="showChangeDialog = false">
+    <div
+      v-if="showChangeDialog"
+      class="modal-backdrop"
+      @click.self="showChangeDialog = false"
+    >
       <div class="modal-card">
         <header class="modal-header">
           <h3>Cambiar {{ productBaseToChange?.producto_descripcion }}</h3>
-          <button class="close-modal-btn" @click="showChangeDialog = false">✕</button>
+          <button
+            class="close-modal-btn"
+            @click="showChangeDialog = false"
+          >
+            ✕
+          </button>
         </header>
         <div class="modal-body grid-options">
           <button 
@@ -197,11 +231,9 @@
             class="option-card"
             @click="selectAlternative(option)"
           >
-            <NuxtImg 
+            <img 
               :src="`https://img.restpe.com/${option.producto_urlimagen}`" 
-              width="150"
-              height="150"
-              format="webp"
+              alt=""
               loading="lazy"
             />
             <span>{{ option.producto_descripcion }}</span>
@@ -209,7 +241,6 @@
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -217,7 +248,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
-import { usecartStore, useFetch, useHead } from '#imports'
+import { usecartStore, useFetch, useHead, useSitesStore } from '#imports'
 import { useToast } from '@/composables/useToast'
 import { URI } from '~/service/conection'
 
@@ -225,24 +256,39 @@ const route = useRoute()
 const router = useRouter()
 const store = usecartStore()
 const { showToast } = useToast()
+const sitesStore = useSitesStore()
 
-const pe_id = 38 
+// --- ESTADOS Y STORES ---
+const siteId = computed(() => (sitesStore?.location?.site?.site_id) || 1)
+const quantity = ref(1)
+const selectedAdditions = ref({})
+const checkedAddition = ref({})
+const exclusive = ref({})
+const productBaseToChange = ref(null)
+const showChangeDialog = ref(false)
 
-// 1. DATA FETCHING 
-const { data: rawCategoriesData, pending: loading } = useFetch(() => `${URI}/tiendas/${pe_id}/products`, {
-  key: 'menu-data',
-})
+// Estado de carga de imagen para transición
+const imageLoaded = ref(false)
+const onImageLoad = () => {
+  imageLoaded.value = true
+}
 
-// 2. LOGICA DEL PRODUCTO ACTUAL
+// --- DATA FETCHING ---
+const { data: rawCategoriesData, pending: loading } = useFetch(
+  () => `${URI}/tiendas/${siteId.value}/products`,
+  { key: () => `menu-data-${siteId.value}` }
+)
+
+// --- LÓGICA DE PRODUCTO ACTUAL ---
 const currentProductId = computed(() => Number(route.params.id))
 
 const flatProducts = computed(() => {
   const raw = rawCategoriesData.value
   if (!raw || !raw.categorias) return []
   const list = []
-  raw.categorias.forEach(cat => {
-    if(cat.visible && cat.products) {
-      cat.products.forEach(prod => {
+  raw.categorias.forEach((cat) => {
+    if (cat.visible && cat.products) {
+      cat.products.forEach((prod) => {
         list.push({ ...prod, categoryName: cat.categoria_descripcion })
       })
     }
@@ -251,24 +297,12 @@ const flatProducts = computed(() => {
 })
 
 const currentProduct = computed(() => {
-  return flatProducts.value.find(p => Number(p.producto_id) === currentProductId.value) || null
+  return flatProducts.value.find((p) => Number(p.producto_id) === currentProductId.value) || null
 })
 
-// 3. ESTADO Y LÓGICA DE NEGOCIO
-const quantity = ref(1)
-const selectedAdditions = ref({})
-const checkedAddition = ref({})
-const exclusive = ref({})
-const productBaseToChange = ref(null)
-const showChangeDialog = ref(false)
-
-// NUEVO: Estado para cargar imagen HD
-const imageLoaded = ref(false)
-const onImageLoad = () => { imageLoaded.value = true }
-
-// Computed Props
+// --- COMPUTEDS DE PRECIO Y INFO ---
 const basePrice = computed(() => {
-  if(!currentProduct.value) return 0
+  if (!currentProduct.value) return 0
   const p = currentProduct.value
   return Number(p.lista_presentacion?.[0]?.producto_precio || p.productogeneral_precio || p.price || 0)
 })
@@ -280,14 +314,34 @@ const showOriginalPrice = computed(() => discountAmount.value > 0)
 const displayName = computed(() => currentProduct.value?.productogeneral_descripcion || currentProduct.value?.product_name || '')
 const productDescription = computed(() => currentProduct.value?.productogeneral_descripcionadicional || currentProduct.value?.productogeneral_descripcionweb || 'Sin descripción detallada.')
 
-const fullImageUrl = computed(() => {
+// --- OPTIMIZACIÓN DE IMAGEN (NUEVA LÓGICA) ---
+
+// 1. URL de vista previa (Low Res): Coincide con la lógica del menú para aprovechar la caché del navegador
+const previewUrl = computed(() => {
   const p = currentProduct.value
   if (!p) return ''
+  // Si tiene identificador interno, usamos la ruta de 400px (la misma del card)
+  if (p.img_identifier) return `${URI}/read-photo-product/${p.img_identifier}/400`
+  // Fallbacks estándar
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url) return p.image_url
-  return '/placeholder.png' 
+  return ''
 })
 
+// 2. URL Principal (High Res): Usamos una versión de mayor calidad
+const highResUrl = computed(() => {
+  const p = currentProduct.value
+  if (!p) return '/placeholder.png'
+  // Pedimos la versión de 600px o superior para el detalle
+  if (p.img_identifier) return `${URI}/read-photo-product/${p.img_identifier}/600`
+  
+  if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
+  if (p.image_url) return p.image_url
+  return '/placeholder.png'
+})
+
+
+// --- LÓGICA DE GRUPOS Y LÍMITES (Igual) ---
 const groupLimits = computed(() => {
   const p = currentProduct.value
   if (!p || !Array.isArray(p.lista_agrupadores)) return {}
@@ -303,7 +357,6 @@ const groupLimits = computed(() => {
   return limits
 })
 
-// Helpers
 const getGroupRequirementText = (group) => {
   const limits = groupLimits.value[String(group.modificador_id)]
   if (!limits) return ''
@@ -312,9 +365,7 @@ const getGroupRequirementText = (group) => {
   return 'Opcional'
 }
 
-const isSelected = (mod, groupId) => {
-  return !!selectedAdditions.value[mod.modificadorseleccion_id]
-}
+const isSelected = (mod, groupId) => !!selectedAdditions.value[mod.modificadorseleccion_id]
 
 const groupCount = (groupId) => {
   const idStr = String(groupId)
@@ -323,21 +374,19 @@ const groupCount = (groupId) => {
 
 const calculateTotal = () => {
   let total = finalPrice.value * quantity.value
-  Object.values(selectedAdditions.value).forEach(item => {
+  Object.values(selectedAdditions.value).forEach((item) => {
     total += Number(item.modificadorseleccion_precio || 0) * Number(item.modificadorseleccion_cantidad || 1) * quantity.value
   })
   return total
 }
 
-// Lógica de Modificadores (Click en la fila)
+// --- HANDLERS (Igual) ---
 const handleRowClick = (mod, groupId) => {
   const limits = groupLimits.value[String(groupId)]
-  
   if (!limits.multiple) {
     handleAdditionChange(mod, groupId)
     return
   }
-  
   const isChecked = checkedAddition.value[mod.modificadorseleccion_id]
   checkedAddition.value[mod.modificadorseleccion_id] = !isChecked
   handleAdditionChange(mod, groupId)
@@ -346,7 +395,7 @@ const handleRowClick = (mod, groupId) => {
 const handleAdditionChange = (item, groupId) => {
   const key = String(groupId)
   const limits = groupLimits.value[key]
-  
+
   if (!limits.multiple) {
     Object.keys(selectedAdditions.value).forEach((k) => {
       if (selectedAdditions.value[k].modificador_id === groupId) delete selectedAdditions.value[k]
@@ -377,7 +426,7 @@ const increment = (item, groupId) => {
   selectedAdditions.value[item.modificadorseleccion_id].modificadorseleccion_cantidad++
 }
 
-const decrement = (item, groupId) => {
+const decrement = (item) => {
   const entry = selectedAdditions.value[item.modificadorseleccion_id]
   if (entry.modificadorseleccion_cantidad > 1) {
     entry.modificadorseleccion_cantidad--
@@ -387,7 +436,7 @@ const decrement = (item, groupId) => {
   }
 }
 
-// 4. LÓGICA DE PRODUCTO BASE (CHANGE)
+// --- CAMBIO DE PRODUCTO BASE ---
 const changeProductBase = (base) => {
   productBaseToChange.value = base
   showChangeDialog.value = true
@@ -402,9 +451,8 @@ const selectAlternative = (option) => {
     producto_urlimagen: current.producto_urlimagen,
     producto_cambio_id: current.producto_id
   }
-  
   const list = current.lista_productoCambio || []
-  const idx = list.findIndex(i => i.producto_id === option.producto_id)
+  const idx = list.findIndex((i) => i.producto_id === option.producto_id)
   if (idx !== -1) list.splice(idx, 1, backup)
   else list.push(backup)
 
@@ -414,11 +462,10 @@ const selectAlternative = (option) => {
     producto_precio: option.producto_precio,
     producto_urlimagen: option.producto_urlimagen
   })
-  
   showChangeDialog.value = false
 }
 
-// 5. VALIDACIÓN Y ADD TO CART
+// --- ADD TO CART & NAV ---
 const validateMinMaximums = () => {
   for (const [gId, lim] of Object.entries(groupLimits.value)) {
     if (groupCount(gId) < lim.min) return false
@@ -427,22 +474,21 @@ const validateMinMaximums = () => {
 }
 
 const addToCart = () => {
+  if (!currentProduct.value) return
   if (!validateMinMaximums()) {
     showToast({ title: 'Faltan opciones', message: 'Por favor completa las opciones obligatorias.', severity: 'error' })
     return
   }
-
   store.addProductToCart(currentProduct.value, quantity.value, Object.values(selectedAdditions.value))
   showToast({ title: 'Agregado', message: 'Producto agregado al carrito', severity: 'success' })
   router.push('/')
 }
 
-// 6. NAVEGACIÓN
 const goBack = () => router.push('/')
 
 const goToRelative = (step) => {
   const list = flatProducts.value
-  const idx = list.findIndex(p => Number(p.producto_id) === currentProductId.value)
+  const idx = list.findIndex((p) => Number(p.producto_id) === currentProductId.value)
   if (idx === -1) return
   const nextIdx = (idx + step + list.length) % list.length
   router.replace(`/producto/${list[nextIdx].producto_id}`)
@@ -451,461 +497,181 @@ const goToNext = () => goToRelative(1)
 const goToPrev = () => goToRelative(-1)
 
 watch(currentProduct, (newVal) => {
-  if(newVal) {
-    // Resetear imagen loaded al cambiar de producto
-    imageLoaded.value = false
-    
+  if (newVal) {
+    imageLoaded.value = false // Reset loading
     quantity.value = 1
     selectedAdditions.value = {}
     checkedAddition.value = {}
     exclusive.value = {}
-    
-    newVal.lista_agrupadores?.forEach(g => {
-        const lim = groupLimits.value[String(g.modificador_id)]
-        if(lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
-            handleAdditionChange(g.listaModificadores[0], g.modificador_id)
-        }
+    newVal.lista_agrupadores?.forEach((g) => {
+      const lim = groupLimits.value[String(g.modificador_id)]
+      if (lim && lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
+        handleAdditionChange(g.listaModificadores[0], g.modificador_id)
+      }
     })
   }
 }, { immediate: true })
 
-useHead({
-  title: computed(() => currentProduct.value ? `${displayName.value} - Menú` : 'Cargando...')
-})
+useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - Menú` : 'Cargando...') })
 </script>
+
 <style scoped>
 .page-wrapper {
-  /* background-color: var(--bg-page, #f9fafb); */
   min-height: 100vh;
   padding-bottom: 90px;
-  max-width: 1300;
+  max-width: 1300px;
   margin: auto;
   font-family: 'Roboto', sans-serif;
   color: var(--text-main, #1f2937);
   position: relative;
 }
 
-/* --- ESTADOS DE CARGA --- */
+/* LOADING */
 .loading-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--bg-page, #f9fafb);
-  z-index: 40; 
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: fixed; inset: 0; background: var(--bg-page, #f9fafb);
+  z-index: 40; display: flex; align-items: center; justify-content: center;
 }
-.spinner-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 15px;
-  color: var(--primary, #dc2626);
-}
-.loading-text {
-  font-size: 1.1rem;
-  color: var(--text-light, #6b7280);
-  font-weight: 500;
-}
-.spin-icon {
-  animation: spin 1s linear infinite;
-}
+.spinner-container { display: flex; flex-direction: column; align-items: center; gap: 15px; color: var(--primary, #dc2626); }
+.spin-icon { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* --- BOTÓN VOLVER --- */
+/* NAVIGATION */
 .nav-btn {
-  position: fixed;
-  z-index: 50;
-  background: white;
-  border: 1px solid var(--border, #e5e7eb);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: var(--text-main, #1f2937);
+  position: fixed; z-index: 50; background: white;
+  border: 1px solid var(--border, #e5e7eb); box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  border-radius: 50%; width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; color: var(--text-main, #1f2937);
 }
 .nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
-.nav-btn--back { top: 1rem; left: 1rem; }
+.nav-btn--back { top: 4rem; left: 1rem; }
 
-/* --- CONTENEDOR PRINCIPAL --- */
-.product-container {
-  display: grid;
-  grid-template-columns: 1fr;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
+/* LAYOUT */
+.product-container { display: grid; grid-template-columns: 1fr; max-width: 1200px; margin: 0 auto; }
 @media (min-width: 1024px) {
-  .product-container {
-    grid-template-columns: 1fr 1fr;
-    gap: 40px;
-    padding: 40px;
-    /* CORRECCIÓN: Usamos stretch (por defecto) o align-items: stretch 
-       para que la columna de la galería sea tan alta como la de detalles */
-    align-items: stretch; 
-  }
+  .product-container { grid-template-columns: 1fr 1fr; gap: 40px; padding: 40px; align-items: stretch; }
 }
 
-/* --- IMÁGENES (Lógica Thumbnail to Hero) --- */
-.gallery-column { 
-  width: 100%; 
-  /* Necesario para que el contenido sticky tenga espacio para moverse */
-  position: relative; 
-}
-
+/* --- IMAGE GALLERY & SKELETON --- */
+.gallery-column { width: 100%; position: relative; }
 .image-wrapper {
-  position: relative;
-  background: #f3f4f6;
-  width: 100%;
-  aspect-ratio: 1/1; /* Mantiene la proporción cuadrada */
-  border-radius: 20px;
-  overflow: hidden;
+  position: relative; background: #f3f4f6; width: 100%; aspect-ratio: 1/1;
+  border-radius: 20px; overflow: hidden;
 }
 
-/* Estilo base para ambas imágenes (previa y final) */
-.img-preview,
+/* SKELETON (Solo si no hay preview) */
+.skeleton-loader {
+  position: absolute; inset: 0;
+  background: #f3f4f6;
+  background-image: linear-gradient(90deg, #f3f4f6 0px, #e5e7eb 50%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  z-index: 5; 
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* PREVIEW IMG (Low Res) */
+.img-preview {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block; z-index: 1;
+  filter: blur(10px); /* Efecto Blur */
+  transform: scale(1.1); /* Evitar bordes blancos por el blur */
+}
+
+/* MAIN IMG (High Res) */
 .img-main {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block; z-index: 2; 
+  opacity: 0; 
   transition: opacity 0.5s ease;
 }
-
-/* La imagen caché (baja res) está abajo */
-.img-preview {
-  z-index: 1;
-}
-
-/* La imagen HD está encima, invisible al inicio */
-.img-main {
-  z-index: 2;
-  opacity: 0;
-}
-/* Cuando carga, se vuelve opaca */
-.img-main.is-loaded {
-  opacity: 1;
-}
+.img-main.is-loaded { opacity: 1; }
 
 @media (min-width: 1024px) {
-  .image-wrapper {
-    /* CORRECCIÓN: Sticky activo */
-    position: sticky;
-    top: 40px; /* Espacio desde el borde superior de la ventana */
-    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-    z-index: 10;
-  }
+  .image-wrapper { position: sticky; top: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); z-index: 10; }
 }
 
-/* CONTROLES DE NAVEGACIÓN PC */
-.desktop-nav-controls {
-  display: none;
-}
+/* CONTROLS PC */
+.desktop-nav-controls { display: none; }
 @media (min-width: 1024px) {
   .desktop-nav-controls {
-    display: flex;
-    justify-content: space-between;
-    position: absolute;
-    top: 50%;
-    width: 100%;
-    transform: translateY(-50%);
-    padding: 0 10px;
-    pointer-events: none;
-    z-index: 10;
+    display: flex; justify-content: space-between; position: absolute;
+    top: 50%; width: 100%; transform: translateY(-50%); padding: 0 10px; pointer-events: none; z-index: 10;
   }
   .nav-arrow {
-    pointer-events: auto;
-    background: rgba(255,255,255,0.8);
-    backdrop-filter: blur(4px);
-    border: none;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: transform 0.2s;
+    pointer-events: auto; background: rgba(255,255,255,0.8); backdrop-filter: blur(4px);
+    border: none; border-radius: 50%; width: 40px; height: 40px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;
   }
   .nav-arrow:hover { transform: scale(1.1); background: white; }
 }
 
-/* --- DETALLES --- */
-.details-column {
-  padding: 20px;
-  background: white;
-}
-@media (min-width: 1024px) {
-  .details-column {
-    padding: 1rem;
-    background: transparent;
-  }
-}
+/* DETAILS COLUMN */
+.details-column { padding: 20px; background: white; }
+@media (min-width: 1024px) { .details-column { padding: 1rem; background: transparent; } }
 
-.product-title {
-  font-size: 1.5rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  margin-bottom: 0.5rem;
-  line-height: 1.2;
-}
+.product-title { font-size: 1.5rem; font-weight: 800; text-transform: uppercase; margin-bottom: 0.5rem; line-height: 1.2; }
+.price-block { margin-bottom: 1rem; display: flex; align-items: baseline; gap: 10px; }
+.price-current { font-size: 1.5rem; font-weight: 700; color: var(--primary, #dc2626); }
+.price-old { font-size: 1rem; text-decoration: line-through; color: var(--text-light, #6b7280); }
+.product-description { color: var(--text-light, #6b7280); font-size: 0.95rem; line-height: 1.5; }
+.divider { border: 0; border-top: 1px solid var(--border, #e5e7eb); margin: 1.5rem 0; }
 
-.price-block {
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.price-current {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--primary, #dc2626);
-}
-.price-old {
-  font-size: 1rem;
-  text-decoration: line-through;
-  color: var(--text-light, #6b7280);
-}
-
-.product-description {
-  color: var(--text-light, #6b7280);
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
-.divider {
-  border: 0;
-  border-top: 1px solid var(--border, #e5e7eb);
-  margin: 1.5rem 0;
-}
-
-/* SECCIONES (Modificadores) */
+/* SECTIONS */
 .section-block { margin-bottom: 2rem; }
-.section-title {
-  font-size: 1rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0;
-}
-.group-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-.group-requirements {
-  font-size: 0.75rem;
-  background: #eee;
-  padding: 2px 8px;
-  border-radius: 10px;
-  color: #555;
-  font-weight: 600;
-}
+.section-title { font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+.group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.group-requirements { font-size: 0.75rem; background: #eee; padding: 2px 8px; border-radius: 10px; color: #555; font-weight: 600; }
 
-/* Base Products */
-.base-products-grid {
-  display: grid;
-  gap: 10px;
-  margin-top: 10px;
-}
-.base-item-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 12px;
-  background: white;
-}
-.base-item-img {
-  width: 50px; height: 50px;
-  border-radius: 8px;
-  overflow: hidden; 
-  flex-shrink: 0;
-}
-.base-item-img img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  display: block; 
-}
+/* Base Products Grid */
+.base-products-grid { display: grid; gap: 10px; margin-top: 10px; }
+.base-item-card { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border, #e5e7eb); border-radius: 12px; background: white; }
+.base-item-img { width: 50px; height: 50px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.base-item-img img { width: 100%; height: 100%; object-fit: cover; }
 .base-item-info { flex: 1; }
-.base-qty-badge {
-  font-size: 0.75rem;
-  font-weight: bold;
-  background: #f3f4f6;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-bottom: 2px;
-}
+.base-qty-badge { font-size: 0.75rem; font-weight: bold; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 2px; }
 .base-name { display: block; font-size: 0.9rem; font-weight: 500; }
-.btn-change-base {
-  background: black; color: white;
-  border: none; font-size: 0.75rem;
-  padding: 6px 12px; border-radius: 20px;
-  font-weight: 600; cursor: pointer;
-}
+.btn-change-base { background: black; color: white; border: none; font-size: 0.75rem; padding: 6px 12px; border-radius: 20px; font-weight: 600; cursor: pointer; }
 
 /* Modifiers */
-.modifiers-list {
-  display: flex; flex-direction: column; gap: 12px;
-}
-.modifier-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 12px;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
+.modifiers-list { display: flex; flex-direction: column; gap: 12px; }
+.modifier-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 12px; background: white; cursor: pointer; transition: all 0.2s ease; }
 .modifier-row:hover { border-color: #ccc; }
-.modifier-row.is-selected {
-  border-color: var(--primary, #dc2626);
-  background-color: #fff5f5;
-}
-.custom-check {
-  width: 20px; height: 20px;
-  border: 2px solid #ccc; border-radius: 4px;
-  position: relative; transition: all 0.2s;
-}
+.modifier-row.is-selected { border-color: var(--primary, #dc2626); background-color: #fff5f5; }
+.custom-check { width: 20px; height: 20px; border: 2px solid #ccc; border-radius: 4px; position: relative; transition: all 0.2s; }
 .custom-check.type-radio { border-radius: 50%; }
-.custom-check.checked {
-  background-color: var(--primary, #dc2626);
-  border-color: var(--primary, #dc2626);
-}
-.custom-check.checked::after {
-  content: ''; position: absolute;
-  top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 8px; height: 8px; background: white;
-  border-radius: 1px;
-}
+.custom-check.checked { background-color: var(--primary, #dc2626); border-color: var(--primary, #dc2626); }
+.custom-check.checked::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: white; border-radius: 1px; }
 .custom-check.type-radio.checked::after { border-radius: 50%; }
-.modifier-info {
-  flex: 1; display: flex;
-  justify-content: space-between;
-  align-items: center; font-size: 0.95rem;
-}
-.modifier-price {
-  font-weight: 600; font-size: 0.9rem;
-  color: var(--text-light, #6b7280);
-}
-.modifier-qty-control {
-  display: flex; align-items: center;
-  background: white;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 8px; overflow: hidden;
-}
-.qty-btn-mini {
-  background: #f9fafb; border: none;
-  padding: 5px 10px; cursor: pointer; font-weight: bold;
-}
-.qty-val-mini {
-  padding: 0 5px; font-size: 0.85rem; font-weight: 600;
-}
+.modifier-info { flex: 1; display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; }
+.modifier-price { font-weight: 600; font-size: 0.9rem; color: var(--text-light, #6b7280); }
+.modifier-qty-control { display: flex; align-items: center; background: white; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; overflow: hidden; }
+.qty-btn-mini { background: #f9fafb; border: none; padding: 5px 10px; cursor: pointer; font-weight: bold; }
+.qty-val-mini { padding: 0 5px; font-size: 0.85rem; font-weight: 600; }
 
-/* Footer Fijo */
-.sticky-footer {
-  position: fixed; bottom: 0; left: 0;
-  width: 100%; background: white;
-  padding: 15px 20px;
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
-  z-index: 100;
-}
-.footer-inner {
-  max-width: 600px; margin: 0 auto;
-  display: flex; gap: 15px;
-}
-.main-qty-control {
-  display: flex; align-items: center;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 5px; background: white;
-}
-.qty-btn-main {
-  width: 40px; height: 100%;
-  border: none; background: transparent;
-  font-size: 1.2rem; cursor: pointer;
-  display: flex; align-items: center;
-  justify-content: center;
-  color: var(--text-main, #1f2937);
-}
-.qty-val-main {
-  width: 30px; text-align: center;
-  font-weight: 700; font-size: 1.1rem;
-}
-.add-cart-btn {
-  flex: 1; background: var(--primary, #dc2626);
-  color: white; border: none;
-  border-radius: 12px; padding: 12px;
-  font-size: 1rem; font-weight: 700;
-  cursor: pointer; transition: background 0.2s;
-}
+/* FOOTER */
+.sticky-footer { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 15px 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); z-index: 100; }
+.footer-inner { max-width: 600px; margin: 0 auto; display: flex; gap: 15px; }
+.main-qty-control { display: flex; align-items: center; border: 1px solid #e5e7eb; border-radius: 12px; padding: 5px; background: white; }
+.qty-btn-main { width: 40px; height: 100%; border: none; background: transparent; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-main, #1f2937); }
+.qty-val-main { width: 30px; text-align: center; font-weight: 700; font-size: 1.1rem; }
+.add-cart-btn { flex: 1; background: var(--primary, #dc2626); color: white; border: none; border-radius: 12px; padding: 12px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background 0.2s; }
 .add-cart-btn:hover { background: var(--primary-dark, #b91c1c); }
-.btn-content {
-  display: flex; justify-content: space-between;
-  align-items: center;
-}
+.btn-content { display: flex; justify-content: space-between; align-items: center; }
 
-/* Modal */
-.modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex; align-items: center;
-  justify-content: center;
-  z-index: 200; padding: 20px;
-}
-.modal-card {
-  background: white; border-radius: 16px;
-  width: 100%; max-width: 400px;
-  overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.2);
-}
-.modal-header {
-  padding: 15px; border-bottom: 1px solid #eee;
-  display: flex; justify-content: space-between; align-items: center;
-}
+/* MODAL */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+.modal-card { background: white; border-radius: 16px; width: 100%; max-width: 400px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+.modal-header { padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
 .modal-header h3 { margin: 0; font-size: 1rem; }
-.close-modal-btn {
-  background: #f3f4f6; border: none;
-  width: 30px; height: 30px;
-  border-radius: 50%; cursor: pointer; font-weight: bold;
-}
-.modal-body {
-  padding: 15px; max-height: 60vh; overflow-y: auto;
-}
-.grid-options {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;
-}
-.option-card {
-  border: 1px solid #eee; background: white;
-  padding: 10px; border-radius: 10px;
-  cursor: pointer; display: flex;
-  flex-direction: column; align-items: center;
-  text-align: center; transition: transform 0.1s;
-}
+.close-modal-btn { background: #f3f4f6; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-weight: bold; }
+.modal-body { padding: 15px; max-height: 60vh; overflow-y: auto; }
+.grid-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+.option-card { border: 1px solid #eee; background: white; padding: 10px; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; text-align: center; transition: transform 0.1s; }
 .option-card:hover { transform: scale(1.03); border-color: #ccc; }
-.option-card img {
-  width: 80px !important; height: 80px !important;
-  object-fit: contain; margin-bottom: 8px; display: block;
-}
+.option-card img { width: 80px !important; height: 80px !important; object-fit: contain; margin-bottom: 8px; display: block; }
 .option-card span { font-size: 0.85rem; line-height: 1.2; }
 </style>

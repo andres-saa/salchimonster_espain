@@ -5,6 +5,7 @@
     <MenuCategoriesBar
       :categories="categories"
       :active-category-id="activeCategoryId"
+      :is-refreshing="isRefreshing"
       @select-category="onClickCategory"
     />
 
@@ -17,14 +18,14 @@
           class="menu-category-section"
         >
           <header class="menu-category-section__header">
-            <h2 
-              class="menu-category-section__title" 
+            <h2
+              class="menu-category-section__title"
               :style="index === 0 ? 'color:white' : ''"
             >
               {{ formatLabel(cat.category_name) }}
             </h2>
-            <p 
-              class="menu-category-section__count" 
+            <p
+              class="menu-category-section__count"
               :style="index === 0 ? 'color:white' : ''"
             >
               {{ cat.products?.length || 0 }} productos
@@ -49,29 +50,113 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
+import {
+  ref,
+  computed,
+  nextTick,
+  watch,
+  onMounted,
+  onBeforeUnmount
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CarouselBanners from '~/components/carouselBanners.vue'
 import MenuCategoriesBar from '~/components/MenuCategoriesBar.vue'
 import MenuProductCard from '~/components/MenuProductCard.vue'
 import { URI } from '~/service/conection'
-import { useHead, useFetch } from '#imports'
+import { useHead, useFetch, useSitesStore, useMenuStore } from '#imports'
 
 const route = useRoute()
 const router = useRouter()
 const sitesStore = useSitesStore()
- 
+const menuStore = useMenuStore()
 
-// 📡 Traer data (Mantenemos la estructura del primero con 'key' para hidratación)
-const { data: rawCategoriesData } = useFetch(
-  () => `${URI}/tiendas/${sitesStore?.location?.site?.site_id || 1}/products`,
+/* ==========================
+   CONFIGURACIÓN DE CACHÉ
+   ========================== */
+// 30 minutos
+const CACHE_TTL = 30 * 60 * 1000
+
+/* ==========================
+   ESTADO PARA REFRESCO EN CLIENTE
+   ========================== */
+const isRefreshing = ref(false)
+let clientRefreshIntervalId = null
+
+const doClientRefresh = async (refreshFn) => {
+  try {
+    isRefreshing.value = true
+    await refreshFn()
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+/* ==========================
+   SITE ID
+   ========================== */
+const siteId = computed(
+  () => (sitesStore?.location?.site?.site_id) || 1
+)
+
+/* ==========================
+   FETCH & HIDRATACIÓN INTELIGENTE
+   ========================== */
+const {
+  data: rawCategoriesData,
+  refresh,
+  pending: menuPending
+} = useFetch(
+  () => `${URI}/tiendas/${siteId.value}/products`,
   {
-    key: 'menu-data', 
+    key: () => `menu-data-${siteId.value}`,
+    server: true,
     default: () => ({ categorias: [] })
   }
 )
 
-// Normalizar texto
+// En cliente: revisar caché de Pinia
+if (process.client) {
+  const cachedWrapper = menuStore.getMenuBySite(siteId.value)
+
+  if (cachedWrapper && cachedWrapper.data && cachedWrapper.timestamp) {
+    const now = Date.now()
+    const age = now - cachedWrapper.timestamp
+
+    if (age < CACHE_TTL) {
+      // CACHÉ FRESCA
+      console.log(
+        `[Menu] Usando caché fresca (Edad: ${Math.round(age / 1000)}s)`
+      )
+      rawCategoriesData.value = cachedWrapper.data
+    } else {
+      console.log('[Menu] Caché expirada. Usando datos de red/SSR.')
+    }
+  }
+}
+
+/* ==========================
+   DATA FUENTE & PERSISTENCIA
+   ========================== */
+const sourceData = computed(() => rawCategoriesData.value)
+
+// Guardar en store cuando llega data válida
+watch(
+  rawCategoriesData,
+  (val) => {
+    if (!process.client) return
+    if (val && Array.isArray(val.categorias) && val.categorias.length) {
+      menuStore.setMenuForSite(siteId.value, {
+        data: val,
+        timestamp: Date.now()
+      })
+    }
+  },
+  { immediate: true }
+)
+
+/* ==========================
+   NORMALIZACIÓN / LABEL
+   ========================== */
 const normalize = (str) =>
   String(str || '')
     .toLowerCase()
@@ -79,7 +164,6 @@ const normalize = (str) =>
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
 
-// Formato de etiqueta
 const formatLabel = (str) => {
   const s = String(str || '').toLowerCase()
   return s.charAt(0).toUpperCase() + s.slice(1)
@@ -89,7 +173,7 @@ const formatLabel = (str) => {
    ADAPTACIÓN DE LA DATA
    ========================== */
 const categories = computed(() => {
-  const raw = rawCategoriesData.value
+  const raw = sourceData.value
   if (!raw || !Array.isArray(raw.categorias)) return []
 
   return raw.categorias
@@ -101,26 +185,25 @@ const categories = computed(() => {
     )
     .map((cat) => {
       const category_id = Number(cat.categoria_id)
-      const category_name = cat.categoria_descripcion || cat.english_name || ''
+      const category_name =
+        cat.categoria_descripcion || cat.english_name || ''
 
-      const products = (cat.products || []).map((p) => {
-        return {
-          ...p,
-          id: p.producto_id,
-          product_name:
-            p.productogeneral_descripcionweb ||
-            p.productogeneral_descripcion ||
-            p.english_name ||
-            '',
-          price: Number(p.productogeneral_precio ?? 0),
-          image_url:
-            p.productogeneral_urlimagen ||
-            (p.lista_productobase &&
-              p.lista_productobase[0] &&
-              p.lista_productobase[0].producto_urlimagen) ||
-            ''
-        }
-      })
+      const products = (cat.products || []).map((p) => ({
+        ...p,
+        id: p.producto_id,
+        product_name:
+          p.productogeneral_descripcionweb ||
+          p.productogeneral_descripcion ||
+          p.english_name ||
+          '',
+        price: Number(p.productogeneral_precio ?? 0),
+        image_url:
+          p.productogeneral_urlimagen ||
+          (p.lista_productobase &&
+            p.lista_productobase[0] &&
+            p.lista_productobase[0].producto_urlimagen) ||
+          ''
+      }))
 
       return {
         ...cat,
@@ -132,29 +215,29 @@ const categories = computed(() => {
 })
 
 /* ==========================
-   NAVEGACIÓN DE PRODUCTOS (Versión Original)
+   NAVEGACIÓN DE PRODUCTOS
    ========================== */
 const onClickProduct = (category, product) => {
-  // Redirección simple a la página de detalle
   router.push(`/producto/${product.id}`)
 }
 
 /* ==========================
-   REFS / OBSERVERS (Lógica Avanzada del Segundo)
+   REFS / OBSERVERS
    ========================== */
 const activeCategoryId = ref(null)
-const categoryRefs = ref({}) 
-const productRefs = ref({}) 
+const categoryRefs = ref({})
+const productRefs = ref({})
 
-// Observers avanzados
-const productObserver = ref(null)          // Para animación de entrada
-const productCategoryObserver = ref(null)  // Para scroll spy preciso
+const productObserver = ref(null)
+const productCategoryObserver = ref(null)
 
 const isProgrammaticScroll = ref(false)
 let programmaticScrollTimer = null
 
-onMounted(() => {
-  // 1. Observer para animación de productos (Fade In)
+onMounted(async () => {
+  if (!process.client) return
+
+  // 1. Observer para animación
   productObserver.value = new IntersectionObserver(
     (entries, obs) => {
       entries.forEach((entry) => {
@@ -167,52 +250,34 @@ onMounted(() => {
         }
       })
     },
-    {
-      root: null,
-      rootMargin: '0px 0px -10% 0px',
-      threshold: 0.1
-    }
+    { rootMargin: '0px 0px -10% 0px', threshold: 0.1 }
   )
 
-  // 2. Observer para actualizar categoría activa (Scroll Spy)
-  // Detecta qué productos están visibles para saber en qué categoría estamos
+  // 2. Scroll spy
   productCategoryObserver.value = new IntersectionObserver(
     (entries) => {
       if (isProgrammaticScroll.value) return
-
       const visibles = []
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return
         const el = entry.target
         if (!el) return
-        
         const catId = Number(el.dataset.categoryId || '')
         if (!catId) return
-
-        visibles.push({
-          catId,
-          top: entry.boundingClientRect.top
-        })
+        visibles.push({ catId, top: entry.boundingClientRect.top })
       })
 
       if (!visibles.length) return
-      
-      // Tomamos el producto más cercano arriba
       visibles.sort((a, b) => a.top - b.top)
       const best = visibles[0]
-
       if (best.catId && best.catId !== activeCategoryId.value) {
         activeCategoryId.value = best.catId
       }
     },
-    {
-      root: null,
-      rootMargin: '-120px 0px -60% 0px',
-      threshold: 0.3
-    }
+    { rootMargin: '-120px 0px -60% 0px', threshold: 0.3 }
   )
 
-  // Observar elementos si ya están montados
+  // Observar refs ya existentes
   nextTick(() => {
     Object.values(productRefs.value).forEach((el) => {
       if (!el) return
@@ -221,15 +286,27 @@ onMounted(() => {
       if (productCategoryObserver.value) productCategoryObserver.value.observe(el)
     })
   })
+
+  // 3. Refresco inmediato al montar (versión más nueva del backend)
+  await doClientRefresh(refresh)
+
+  // 4. Intervalo de actualización (cada 10 min)
+  clientRefreshIntervalId = window.setInterval(() => {
+    doClientRefresh(refresh)
+  }, 10 * 60 * 1000)
 })
 
 onBeforeUnmount(() => {
   if (productObserver.value) productObserver.value.disconnect()
   if (productCategoryObserver.value) productCategoryObserver.value.disconnect()
-  clearTimeout(programmaticScrollTimer)
+  if (programmaticScrollTimer && process.client) {
+    window.clearTimeout(programmaticScrollTimer)
+  }
+  if (clientRefreshIntervalId && process.client) {
+    window.clearInterval(clientRefreshIntervalId)
+  }
 })
 
-// Ref para la sección (usado para hacer scroll hacia ella)
 const setCategoryRef = (id, el) => {
   if (!el) {
     delete categoryRefs.value[id]
@@ -238,7 +315,6 @@ const setCategoryRef = (id, el) => {
   categoryRefs.value[id] = el
 }
 
-// Ref para el producto (usado para los observers)
 const setProductRef = (productId, categoryId, el) => {
   if (!el) {
     const prevEl = productRefs.value[productId]
@@ -249,15 +325,10 @@ const setProductRef = (productId, categoryId, el) => {
     delete productRefs.value[productId]
     return
   }
-
   productRefs.value[productId] = el
-  // Clase inicial para animación (asegúrate de tener CSS para esto o quitarlo si no lo usas)
   el.classList.add('menu-product-card--hidden')
-  
-  // Data attributes necesarios para el observer
   el.dataset.productId = String(productId)
   el.dataset.categoryId = String(categoryId)
-
   if (productObserver.value) productObserver.value.observe(el)
   if (productCategoryObserver.value) productCategoryObserver.value.observe(el)
 }
@@ -265,21 +336,19 @@ const setProductRef = (productId, categoryId, el) => {
 /* ==========================
    SCROLL A CATEGORÍA
    ========================== */
-const HEADER_OFFSET = 7 * 16 
+const HEADER_OFFSET = 7 * 16
 
 const scrollToCategoryId = (id) => {
+  if (!process.client) return
+
   const el = categoryRefs.value[id]
   if (!el) return
 
   const y = el.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET
-
   isProgrammaticScroll.value = true
-  clearTimeout(programmaticScrollTimer)
+  if (programmaticScrollTimer) window.clearTimeout(programmaticScrollTimer)
 
-  window.scrollTo({
-    top: y,
-    behavior: 'smooth'
-  })
+  window.scrollTo({ top: y, behavior: 'smooth' })
 
   programmaticScrollTimer = window.setTimeout(() => {
     isProgrammaticScroll.value = false
@@ -287,34 +356,29 @@ const scrollToCategoryId = (id) => {
 }
 
 /* ==========================
-   URL & NAVEGACIÓN (Categorías)
+   URL & NAVEGACIÓN
    ========================== */
 const onClickCategory = (category) => {
   activeCategoryId.value = category.category_id
-  
   router.push({
     path: route.path,
-    query: {
-      category: category.category_name
-    }
+    query: { category: category.category_name }
   })
-
   nextTick(() => {
     scrollToCategoryId(category.category_id)
   })
 }
 
 const scrollFromRoute = () => {
+  if (!process.client) return
+
   const q = route.query.category
   if (!q || typeof q !== 'string') return
-
   const target = categories.value.find(
     (c) => normalize(c.category_name) === normalize(q)
   )
-
   if (!target) return
   activeCategoryId.value = target.category_id
-
   nextTick(() => {
     scrollToCategoryId(target.category_id)
   })
@@ -332,12 +396,10 @@ watch(
   categories,
   (list) => {
     if (!list.length) return
-
     if (route.query.category && typeof route.query.category === 'string') {
       scrollFromRoute()
       return
     }
-
     if (activeCategoryId.value == null) {
       activeCategoryId.value = list[0].category_id
     }
@@ -351,7 +413,6 @@ watch(
 const pageTitle = computed(() => {
   const base = 'Carta Salchimonster'
   const categoryQ = route.query.category
-
   if (categoryQ && typeof categoryQ === 'string') {
     return `${formatLabel(categoryQ)} | ${base}`
   }
@@ -383,7 +444,6 @@ useHead(() => ({
   padding-bottom: 1.5rem;
   border-bottom: 1px solid #e5e7eb;
 }
-
 .menu-category-section:last-of-type {
   border-bottom: none;
   padding-bottom: 0;
@@ -423,16 +483,13 @@ useHead(() => ({
     padding: 0.5rem 0.5rem 1.5rem;
     margin-bottom: 1.5rem;
   }
-
   .menu-category-section {
     padding-top: 1.2rem;
     padding-bottom: 1rem;
   }
-
   .menu-category-section__title {
     font-size: 1.5rem;
   }
-
   .menu-category-section__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.55rem;

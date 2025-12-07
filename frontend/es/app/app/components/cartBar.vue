@@ -64,7 +64,7 @@ const handleScroll = () => {
   clearTimeout(scrollTimer)
   scrollTimer = setTimeout(() => {
     showElement.value = true
-  }, 500)
+  }, 200)
 }
 
 onMounted(() => {
@@ -114,7 +114,7 @@ const enviarAlCarro = () => {
   background-color: #ffffff;
   box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.2);
   padding: 0 3rem;
-  transition: transform 0.3s, opacity 0.3s;
+  transition: transform 0.2, opacity 0.2;
 }
 
 /* Hidden state for cart bar */
@@ -167,7 +167,7 @@ const enviarAlCarro = () => {
 .img-cart {
   height: 3rem;
   object-fit: contain;
-  transition: all 0.3s ease;
+  transition: all 0.2 ease;
 }
 
 /* Extra products indicator */
