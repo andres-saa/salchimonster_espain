@@ -246,7 +246,7 @@ const selectedStoreId = ref<number | null>(null)
 const sessionToken = ref(Math.random().toString(36).slice(2))
 
 // ==========================================
-// ESTADO DE REDIRECCIÓN (NUEVO)
+// ESTADO DE REDIRECCIÓN
 // ==========================================
 const isRedirecting = ref(false)
 const redirectStoreName = ref('')
@@ -394,15 +394,14 @@ function closeModal() {
 }
 
 // ==========================================
-// REDIRECCIÓN CON ANIMACIÓN Y DELAY
+// REDIRECCIÓN CON ANIMACIÓN
 // ==========================================
 function goToStoreUrl(store: Store, mode: 'delivery' | 'pickup', data?: { address: string, cost: number }) {
   if (typeof window === 'undefined') return
   
-  // 1. Configuramos el overlay
   redirectStoreName.value = store.name.replace('SALCHIMONSTER', '').trim() || store.name
-  closeModal() // Cerramos modal para limpiar la vista
-  isRedirecting.value = true // Activamos Blur y animación
+  closeModal() 
+  isRedirecting.value = true 
 
   const protocol = window.location.protocol || 'http:'
   let url = `${protocol}//${store.subdomain}.salchimonster.es`
@@ -419,10 +418,8 @@ function goToStoreUrl(store: Store, mode: 'delivery' | 'pickup', data?: { addres
   const qs = params.toString()
   if (qs) url += `?${qs}`
 
-  // 2. Retraso artificial de 2.5s para mostrar la animación
   setTimeout(() => {
     window.location.href = url
-    
   }, 2500)
 }
 
@@ -495,21 +492,68 @@ async function loadData() {
 
 const filteredStores = computed(() => stores.value)
 
+// ==========================================
+// INICIALIZACIÓN DEL MAPA (Lógica del "Viejo")
+// ==========================================
 onMounted(async () => {
-  isRedirecting.value = false // Activamos Blur y animación
   await loadData()
   const mod = await import('leaflet')
   const L = (mod as any).default ?? mod
   leafletModule.value = L
 
-  map.value = L.map('vicio-map', { zoomControl: false }).setView([40.416, -3.703], 6)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
-  
-  const fireIcon = L.divIcon({ className: 'leaflet-div-icon fire-icon', html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" />` })
+  // 1. DEFINIMOS LOS LÍMITES (BOUNDS) DE ESPAÑA IGUAL QUE EN EL VIEJO
+  const spainBounds = L.latLngBounds(
+    L.latLng(27.5, -18.5),
+    L.latLng(43.9, 4.5)
+  )
 
-  stores.value.forEach(s => {
-    L.marker([s.lat, s.lng], { icon: fireIcon }).addTo(map.value).bindPopup(`<strong>${s.name}</strong>`)
+  // 2. INICIALIZAMOS EL MAPA CON LAS RESTRICCIONES (No zoom, no scroll, no drag)
+  map.value = L.map('vicio-map', {
+    zoom: 6,
+    minZoom: 5,
+    maxZoom: 16,
+    maxBounds: spainBounds,
+    maxBoundsViscosity: 1.0,
+    zoomControl: false,       // Sin controles de zoom
+    scrollWheelZoom: false,   // Sin zoom con rueda
+    doubleClickZoom: false,   // Sin zoom doble click
+    touchZoom: false,         // Sin zoom táctil
+    boxZoom: false,
+    keyboard: false,
+    dragging: false,          // MAPA ESTATICO (NO ARRASTRABLE)
+    tap: false
   })
+
+  // 3. CAPA DE MOSAICO (TILES)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+    attribution: '&copy; OpenStreetMap' 
+  }).addTo(map.value)
+  
+  // 4. ICONO DE FUEGO (GIF) DEL VIEJO
+  const fireIcon = L.divIcon({ 
+    className: 'leaflet-div-icon fire-icon', 
+    html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" alt="Salchimonster" />` 
+  })
+
+  // 5. AÑADIR MARCADORES Y CENTRAR
+  const latlngs: [number, number][] = []
+  
+  stores.value.forEach(s => {
+    L.marker([s.lat, s.lng], { icon: fireIcon })
+      .addTo(map.value)
+      .bindPopup(`<strong>${s.name}</strong>`)
+    
+    latlngs.push([s.lat, s.lng])
+  })
+
+  // 6. AJUSTAR LA VISTA INICIAL
+  // Si hay sedes, centramos en ellas, sino vista general de España (Valencia por defecto)
+  if (latlngs.length > 0) {
+    const bounds = L.latLngBounds(latlngs)
+    map.value.fitBounds(bounds, { padding: [40, 40] })
+  } else {
+    map.value.setView([39.478, -0.349], 6) // Centro en Valencia aprox
+  }
 })
 
 watch(() => modalStep.value, (val) => {
@@ -612,6 +656,7 @@ watch(() => modalStep.value, (val) => {
 .spin-icon { animation: spin 1s linear infinite; color: #ff6600; margin-bottom: 0.5rem; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
+/* ICONO DE FUEGO (LEAFLET) */
 :global(.leaflet-div-icon.fire-icon) { width: 42px!important; height: 42px!important; background: transparent; border: none; }
 :global(.leaflet-div-icon.fire-icon .fire-img) { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
 :deep(.leaflet-tile) { filter: grayscale(100%) !important; }
@@ -624,87 +669,29 @@ watch(() => modalStep.value, (val) => {
   @keyframes slideUpMobile { from { transform: translateY(100%); } to { transform: translateY(0); } }
 }
 
-/* =========================================
-   OVERLAY DE REDIRECCIÓN (ANIMACIÓN)
-   ========================================= */
+/* REDIRECT OVERLAY */
 .redirect-overlay {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(255, 255, 255, 0.7); /* Fondo blanco con transparencia */
-  backdrop-filter: blur(15px); /* Desenfoque fuerte */
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(15px);
   z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
 }
-
-.redirect-content {
-  text-align: center;
-  animation: popIn 0.5s ease-out;
-}
-
-@keyframes popIn {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-.redirect-spinner {
-  position: relative;
-  display: inline-flex;
-  margin-bottom: 2rem;
-  color: #ff6600;
-}
-
-.rocket-icon {
-  z-index: 2;
-  animation: rocketFloat 1.5s ease-in-out infinite alternate;
-}
-
+.redirect-content { text-align: center; animation: popIn 0.5s ease-out; }
+@keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.redirect-spinner { position: relative; display: inline-flex; margin-bottom: 2rem; color: #ff6600; }
+.rocket-icon { z-index: 2; animation: rocketFloat 1.5s ease-in-out infinite alternate; }
 .pulse-ring {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80px; height: 80px;
-  border-radius: 50%;
-  border: 2px solid #ff6600;
-  opacity: 0;
-  animation: pulse 2s infinite;
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 80px; height: 80px; border-radius: 50%; border: 2px solid #ff6600;
+  opacity: 0; animation: pulse 2s infinite;
 }
-
-.redirect-title {
-  font-size: 1.2rem;
-  color: #64748b;
-  margin: 0;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.redirect-store {
-  font-size: 2.5rem;
-  font-weight: 900;
-  color: #0f172a;
-  margin: 0.5rem 0;
-  line-height: 1.1;
-  max-width: 90vw;
-}
-
-.redirect-subtitle {
-  font-size: 1rem;
-  color: #94a3b8;
-  margin-top: 1rem;
-}
-
-@keyframes rocketFloat {
-  from { transform: translateY(0); }
-  to { transform: translateY(-10px); }
-}
-
-@keyframes pulse {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
-  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
-}
-
+.redirect-title { font-size: 1.2rem; color: #64748b; margin: 0; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; }
+.redirect-store { font-size: 2.5rem; font-weight: 900; color: #0f172a; margin: 0.5rem 0; line-height: 1.1; max-width: 90vw; }
+.redirect-subtitle { font-size: 1rem; color: #94a3b8; margin-top: 1rem; }
+@keyframes rocketFloat { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+@keyframes pulse { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
