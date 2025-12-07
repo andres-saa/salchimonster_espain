@@ -420,9 +420,9 @@ function goToStoreUrl(store: Store, mode: 'delivery' | 'pickup', data?: { addres
   if (qs) url += `?${qs}`
 
   // 2. Retraso artificial de 2.5s para mostrar la animación
- 
+  setTimeout(() => {
     window.location.href = url
- 
+  }, 2500)
 }
 
 // AUTOCOMPLETE SIDEBAR
