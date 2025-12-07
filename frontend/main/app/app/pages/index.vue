@@ -496,6 +496,8 @@ const filteredStores = computed(() => stores.value)
 // INICIALIZACIÓN DEL MAPA (Lógica del "Viejo")
 // ==========================================
 onMounted(async () => {
+    isRedirecting.value = false // Activamos Blur y animación
+
   await loadData()
   const mod = await import('leaflet')
   const L = (mod as any).default ?? mod
@@ -565,8 +567,9 @@ watch(() => modalStep.value, (val) => {
 
 <style scoped>
 /* ESTRUCTURA GENERAL */
-.vicio-page { display: flex; min-height: 100vh; width: 100%; font-family: 'Roboto', sans-serif; background: #f8fafc; }
-.vicio-map { flex: 1 1 55%; height: 100vh; background: #e2e8f0; }
+/* USAMOS dvh (dynamic viewport height) PARA MOVILES CON BARRAS FLOTANTES */
+.vicio-page { display: flex; min-height: 100dvh; width: 100%; font-family: 'Roboto', sans-serif; background: #f8fafc; }
+.vicio-map { flex: 1 1 55%; height: 100dvh; background: #e2e8f0; }
 .vicio-sidebar { flex: 1 1 45%; display: flex; flex-direction: column; background: #fff; box-shadow: -5px 0 20px rgba(0,0,0,0.05); z-index: 20; position: relative; }
 
 .sidebar-header { padding: 1.5rem; background: #fff; border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 6px rgba(0,0,0,0.02); z-index: 10; }
@@ -599,7 +602,7 @@ watch(() => modalStep.value, (val) => {
 .autocomplete-loading { padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.8rem; }
 
 /* ESTILOS MODAL */
-.modal-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+.modal-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: rgba(15, 23, 42, 0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
 
 .modal-content {
   background: #ffffff; width: 90%; max-width: 420px; border-radius: 1rem;
@@ -661,18 +664,39 @@ watch(() => modalStep.value, (val) => {
 :global(.leaflet-div-icon.fire-icon .fire-img) { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
 :deep(.leaflet-tile) { filter: grayscale(100%) !important; }
 
+/* MEDIA QUERY ACTUALIZADA PARA CORREGIR IPHONE */
 @media (max-width: 900px) {
-  .vicio-page { flex-direction: column; height: 100vh; overflow: hidden; }
+  .vicio-page { flex-direction: column; height: 100dvh; overflow: hidden; }
   .vicio-map { flex: 0 0 40%; height: 40% !important; }
   .vicio-sidebar { flex: 1 1 60%; height: 60% !important; border-radius: 1.5rem 1.5rem 0 0; margin-top: -1.5rem; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); }
-  .modal-content { width: 95%; max-width: none; border-radius: 1rem 1rem 0 0; position: absolute; bottom: 0; animation: slideUpMobile 0.3s ease-out; }
+
+  /* FIX IPHONE: Alineación inferior en el contenedor */
+  .modal-backdrop {
+    align-items: flex-end; 
+  }
+
+  /* FIX IPHONE: Padding inferior seguro y ancho completo */
+  .modal-content { 
+    width: 100%; 
+    max-width: none; 
+    border-radius: 1.5rem 1.5rem 0 0; 
+    position: relative;
+    bottom: auto;
+    
+    /* Variable para respetar la barra inferior del iPhone */
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+    max-height: 85dvh;
+    overflow-y: auto;
+
+    animation: slideUpMobile 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
   @keyframes slideUpMobile { from { transform: translateY(100%); } to { transform: translateY(0); } }
 }
 
 /* REDIRECT OVERLAY */
 .redirect-overlay {
   position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
+  top: 0; left: 0; width: 100vw; height: 100dvh;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(15px);
   z-index: 99999;
