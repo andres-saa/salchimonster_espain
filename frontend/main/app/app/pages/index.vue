@@ -496,7 +496,16 @@ const filteredStores = computed(() => stores.value)
 // INICIALIZACIÓN DEL MAPA (Lógica del "Viejo")
 // ==========================================
 onMounted(async () => {
-    isRedirecting.value = false // Activamos Blur y animación
+    window.addEventListener('pageshow', (event) => {
+    // Si la página se cargó desde la caché (persisted) o simplemente al mostrarse
+    isRedirecting.value = false
+    
+    // Opcional: Si quieres que al volver también se cierre el modal
+    // showModal.value = false 
+  })
+  // ---------------------
+
+  isRedirecting.value = false
 
   await loadData()
   const mod = await import('leaflet')
