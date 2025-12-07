@@ -10,112 +10,29 @@
           ELIGE TU SALCHIMONSTER MÁS CERCANO
         </h2>
 
-        <!-- <div class="city-select-wrapper">
-          <label class="city-label" for="city-select">Ciudad</label>
-          <div class="city-select-container">
-            <select
-              id="city-select"
-              v-model.number="selectedCityId"
-              class="city-select"
-              @change="onCityChange"
-            >
-              <option :value="0">Todas las ciudades</option>
-              <option
-                v-for="city in orderedCities"
-                :key="city.city_id"
-                :value="city.city_id"
-              >
-                {{ city.city_name }}
-              </option>
-            </select>
-            <span class="city-select-arrow">
-              <Icon name="mdi:chevron-down" size="1.2em" />
-            </span>
-          </div>
-        </div> -->
-
         <div class="search-wrapper">
           <input
-            v-model="addressQuery"
+            v-model="sidebarAddressQuery"
             type="text"
             class="search-input"
-            placeholder="Escribe tu dirección para domicilio…"
-            @input="onAddressInput"
+            placeholder="📍 Escribe tu dirección para ver cobertura..."
+            @input="onSidebarAddressInput"
             autocomplete="off"
           />
-          <ul v-if="showSuggestions" class="autocomplete-list">
+          <ul v-if="showSidebarSuggestions" class="autocomplete-list">
             <li
-              v-for="s in suggestions"
+              v-for="s in sidebarSuggestions"
               :key="s.place_id"
               class="autocomplete-item"
-              @click="onSelectSuggestion(s)"
+              @click="onSelectSidebarSuggestion(s)"
             >
               <Icon name="mdi:map-marker-outline" class="item-icon" />
               {{ s.description }}
             </li>
-            <li
-              v-if="!suggestions.length && addressQuery.trim().length > 0 && !loadingAutocomplete"
-              class="autocomplete-empty"
-            >
-              No se encontraron resultados.
-            </li>
-            <li v-if="loadingAutocomplete" class="autocomplete-loading">
-              Buscando…
-            </li>
+            <li v-if="loadingSidebar" class="autocomplete-loading">Buscando...</li>
           </ul>
         </div>
       </header>
-
-      <section v-if="coverageResult" class="coverage-card">
-        <div class="coverage-header">
-          <Icon name="mdi:map-marker-check" size="1.4em" class="coverage-icon" />
-          <h3 class="coverage-title">Resumen de domicilio</h3>
-        </div>
-        
-        <div class="coverage-body">
-          <div class="coverage-row">
-            <span class="coverage-label">Dirección:</span>
-            <span class="coverage-value address-text">{{ coverageResult.formatted_address }}</span>
-          </div>
-          
-          <div class="coverage-row">
-            <span class="coverage-label">Sede más cercana:</span>
-            <span class="coverage-value">
-              {{ coverageResult.nearest?.site?.site_name || 'N/A' }} 
-              <small v-if="coverageResult.nearest">({{ coverageResult.nearest.distance_miles.toFixed(1) }} km)</small>
-            </span>
-          </div>
-
-          <div class="coverage-row highlight">
-            <span class="coverage-label">Costo envío:</span>
-            <span class="coverage-value price">{{ formatCOP(coverageResult.delivery_cost_cop) }}</span>
-          </div>
-
-          <div class="coverage-status-text" :class="coverageResult.nearest?.in_coverage ? 'text-ok' : 'text-fail'">
-             {{ coverageResult.nearest?.in_coverage ? '✅ Cubrimos tu zona' : '❌ Fuera de zona de entrega' }}
-          </div>
-        </div>
-
-        <div class="coverage-actions">
-            <button 
-                v-if="coverageResult.nearest?.in_coverage && getStoreById(coverageResult.nearest.site.site_id)"
-                class="btn-action btn-delivery"
-                @click="goToStore(getStoreById(coverageResult.nearest.site.site_id)!, 'delivery')"
-            >
-                <Icon name="mdi:moped" size="1.2em" />
-                Pedir Domicilio
-            </button>
-
-            <button 
-                v-if="coverageResult.nearest && getStoreById(coverageResult.nearest.site.site_id)"
-                class="btn-action btn-pickup"
-                @click="goToStore(getStoreById(coverageResult.nearest.site.site_id)!, 'pickup')"
-            >
-                <Icon name="mdi:shopping-outline" size="1.2em" />
-                Recoger en Sede
-            </button>
-        </div>
-      </section>
 
       <main class="stores-list">
         <article
@@ -123,7 +40,7 @@
           :key="store.id"
           class="store-item"
           :class="{ 'store-item--active': store.id === selectedStoreId }"
-          @click="goToStore(store, 'default')"
+          @click="handleStoreClick(store)"
         >
           <div class="store-img-wrapper">
             <img
@@ -152,808 +69,640 @@
               :data-status="store.status || 'unknown'"
             >
               <span v-if="store.status === 'open'" class="status-flex">
-                <Icon name="mdi:check-circle-outline" size="1.1em" />
-                Abierto
+                <Icon name="mdi:check-circle-outline" size="1.1em" /> Abierto
               </span>
               <span v-else-if="store.status === 'closed' || store.status === 'close'" class="status-flex">
-                <Icon name="mdi:close-circle-outline" size="1.1em" />
-                Cerrado
+                <Icon name="mdi:close-circle-outline" size="1.1em" /> Cerrado
               </span>
               <span v-else class="status-flex">
-                <Icon name="mdi:progress-clock" size="1.1em" />
-                Consultando…
+                <Icon name="mdi:progress-clock" size="1.1em" /> ...
               </span>
             </button>
           </div>
 
-          <button class="store-arrow" @click.stop="goToStore(store, 'default')">
+          <button class="store-arrow" @click.stop="handleStoreClick(store)">
              <Icon name="mdi:chevron-right" size="1.6em" />
           </button>
         </article>
 
         <p v-if="filteredStores.length === 0" class="no-results">
-          No se encontraron sedes en el área visible.
-          <br />
-          Mueve el mapa o cambia la ciudad seleccionada.
+          No se encontraron sedes.
         </p>
       </main>
     </div>
+
+    <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
+      <div class="modal-content">
+        <button class="modal-close" @click="closeModal">
+          <Icon name="mdi:close" size="1.5em" />
+        </button>
+        
+        <div class="modal-header">
+          <h3 class="modal-title">
+            {{ getModalTitle() }}
+          </h3>
+          <p class="modal-subtitle" v-if="pendingStore">
+            Sede: <strong>{{ pendingStore.name }}</strong>
+          </p>
+        </div>
+
+        <div v-if="modalStep === 'select'" class="modal-actions">
+          <button class="modal-btn btn-pickup" @click="selectPickup">
+            <Icon name="mdi:shopping-outline" size="1.6em" />
+            <div>
+              <span>Pasar a Recoger</span>
+              <small>Ir al menú para llevar</small>
+            </div>
+          </button>
+
+          <button class="modal-btn btn-delivery" @click="goToAddressStep">
+            <Icon name="mdi:moped" size="1.6em" />
+            <div>
+              <span>Pedir a Domicilio</span>
+              <small>Verificar cobertura y costo</small>
+            </div>
+          </button>
+        </div>
+
+        <div v-else class="modal-address-step">
+          <div class="modal-input-wrapper">
+            <input 
+              ref="modalInputRef"
+              v-model="modalAddressQuery"
+              type="text" 
+              class="modal-search-input"
+              placeholder="Ingresa tu dirección exacta..."
+              @input="onModalAddressInput"
+              autocomplete="off"
+            />
+            
+            <ul v-if="showModalSuggestions" class="modal-autocomplete-list">
+              <li
+                v-for="s in modalSuggestions"
+                :key="s.place_id"
+                class="modal-autocomplete-item"
+                @click="onSelectModalSuggestion(s)"
+              >
+                <Icon name="mdi:map-marker-outline" class="item-icon" />
+                {{ s.description }}
+              </li>
+              <li v-if="loadingModalAutocomplete" class="modal-loading-item">Buscando...</li>
+            </ul>
+          </div>
+
+          <div v-if="calculatingCoverage" class="coverage-loading">
+            <Icon name="mdi:loading" size="2em" class="spin-icon" />
+            <p>Verificando cobertura...</p>
+          </div>
+
+          <div v-if="modalCoverageResult && !calculatingCoverage" class="modal-coverage-result">
+            <div class="result-row">
+              <span class="label">Dirección:</span>
+              <span class="value address" :title="modalCoverageResult.formatted_address">
+                {{ modalCoverageResult.formatted_address }}
+              </span>
+            </div>
+            
+            <div class="result-row" v-if="modalCoverageResult.nearest?.site && pendingStore && modalCoverageResult.nearest.site.site_id !== pendingStore.id">
+               <span class="label">Atendido por:</span>
+               <span class="value highlight-store">{{ modalCoverageResult.nearest.site.site_name }}</span>
+            </div>
+
+            <div class="result-row">
+              <span class="label">Costo envío:</span>
+              <span class="value price">{{ formatCOP(modalCoverageResult.delivery_cost_cop) }}</span>
+            </div>
+            
+            <div class="result-status" :class="modalCoverageResult.nearest?.in_coverage ? 'status-ok' : 'status-fail'">
+               <Icon :name="modalCoverageResult.nearest?.in_coverage ? 'mdi:check-circle' : 'mdi:alert-circle'" />
+               {{ modalCoverageResult.nearest?.in_coverage ? '¡Estás en zona!' : 'Fuera de zona' }}
+            </div>
+
+            <button 
+              v-if="modalCoverageResult.nearest?.in_coverage"
+              class="modal-confirm-btn"
+              @click="confirmDeliveryAndGo"
+            >
+              Realizar Pedido
+              <Icon name="mdi:arrow-right" />
+            </button>
+          </div>
+
+          <button v-if="modalStep === 'address'" class="modal-back-link" @click="modalStep = 'select'">
+            Cambiar a Recoger
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <Transition name="fade">
+      <div v-if="isRedirecting" class="redirect-overlay">
+        <div class="redirect-content">
+          <div class="redirect-spinner">
+            <Icon name="mdi:rocket-launch-outline" size="3em" class="rocket-icon" />
+            <div class="pulse-ring"></div>
+          </div>
+          <h2 class="redirect-title">Te estamos llevando a</h2>
+          <h3 class="redirect-store">{{ redirectStoreName }}</h3>
+          <p class="redirect-subtitle">Preparando el menú...</p>
+        </div>
+      </div>
+    </Transition>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import 'leaflet/dist/leaflet.css'
 
 // ==========================================
-// CONFIGURACIÓN E INTERFACES
+// CONFIGURACIÓN
 // ==========================================
 const BACKEND_BASE = 'https://backend.salchimonster.com'
 const LOCATIONS_BASE = 'https://api.locations.salchimonster.com'
 
 const map = ref<any>(null)
 const leafletModule = ref<any>(null)
-const markers = ref<Record<number, any>>({})
-const mapBounds = ref<MapBounds | null>(null)
-const initialBounds = ref<any | null>(null)
 
+// Interfaces
 interface Store {
-  id: number
-  name: string
-  city: string
-  cityId: number
-  postalCode: string
-  address: string
-  lat: number
-  lng: number
-  services: string[]
-  status?: string
-  nextOpeningTime?: string | null
-  subdomain: string
-  img_id?: number | null
+  id: number; name: string; city: string; cityId: number; address: string; lat: number; lng: number
+  services: string[]; status?: string; subdomain: string; img_id?: number | null
 }
-
-interface MapBounds {
-  north: number
-  south: number
-  east: number
-  west: number
-}
-
 interface RawSite {
-  site_id: number
-  site_name: string
-  site_address: string | null
-  city_name: string
-  city_id: number
-  show_on_web: boolean
-  time_zone: string
-  location?: [number, number] | null
-  subdomain: string
-  img_id?: number | null
-  site_phone?: string
+  site_id: number; site_name: string; site_address: string | null; city_name: string; city_id: number
+  show_on_web: boolean; time_zone: string; location?: [number, number] | null; subdomain: string; img_id?: number | null
 }
-
-interface City {
-  city_id: number
-  city_name: string
-  visible: boolean
-  index: number
-}
-
-interface PlaceSuggestion {
-  description: string
-  place_id: string
-}
-
-interface CoverageNearestSite {
-  site: {
-    site_id: number
-    site_name: string
-    site_address: string | null
-    time_zone: string
-    city: string
-  }
-  distance_miles: number
-  in_coverage: boolean
-  driving_distance_miles: number
-}
-
+interface PlaceSuggestion { description: string; place_id: string }
 interface CoverageDetails {
-  place_id: string
-  formatted_address: string
-  lat: number
-  lng: number
-  nearest: CoverageNearestSite | null
-  delivery_cost_cop: number
-  distance_miles: number
-  error: any
+  place_id: string; formatted_address: string; lat: number; lng: number; delivery_cost_cop: number;
+  nearest: { site: { site_id: number; site_name: string; subdomain?: string }; in_coverage: boolean } | null
 }
 
 const stores = ref<Store[]>([])
-const cities = ref<City[]>([])
-const selectedCityId = ref<number>(0)
 const selectedStoreId = ref<number | null>(null)
-
-// Autocomplete
-const addressQuery = ref('')
-const suggestions = ref<PlaceSuggestion[]>([])
-const loadingAutocomplete = ref(false)
-const showSuggestions = ref(false)
-const coverageResult = ref<CoverageDetails | null>(null)
-const dropoffMarker = ref<any | null>(null)
-let dropoffIcon: any = null
-
-const sessionToken = ref(
-  typeof crypto !== 'undefined' && (crypto as any).randomUUID
-    ? (crypto as any).randomUUID()
-    : Math.random().toString(36).slice(2)
-)
+const sessionToken = ref(Math.random().toString(36).slice(2))
 
 // ==========================================
-// LÓGICA DE IMÁGENES (solo read-photo-product)
+// ESTADO DE REDIRECCIÓN (NUEVO)
 // ==========================================
+const isRedirecting = ref(false)
+const redirectStoreName = ref('')
+
+// ==========================================
+// ESTADO DEL MODAL Y BÚSQUEDA
+// ==========================================
+const showModal = ref(false)
+const modalStep = ref<'select' | 'address'>('select')
+const pendingStore = ref<Store | null>(null)
+
+// Modal Internals
+const modalAddressQuery = ref('')
+const modalSuggestions = ref<PlaceSuggestion[]>([])
+const showModalSuggestions = ref(false)
+const loadingModalAutocomplete = ref(false)
+const calculatingCoverage = ref(false)
+const modalCoverageResult = ref<CoverageDetails | null>(null)
+const modalInputRef = ref<HTMLInputElement | null>(null)
+
+// Sidebar Search
+const sidebarAddressQuery = ref('')
+const sidebarSuggestions = ref<PlaceSuggestion[]>([])
+const showSidebarSuggestions = ref(false)
+const loadingSidebar = ref(false)
+
+// Imágenes
 const imgCache = ref<Record<number, string>>({})
-
-const byImgId = (img_id: number | string) =>
-  `${BACKEND_BASE}/read-photo-product/${img_id}`
-
-// 👉 Imagen por defecto si no hay img_id o falla la carga
 const FALLBACK_IMG = `${BACKEND_BASE}/read-photo-product/default`
-
-const currentImage = (store: Store) => {
-  // Si ya tenemos cacheado, usarlo
-  if (imgCache.value[store.id]) return imgCache.value[store.id]
-
-  // Si la sede tiene img_id, usamos read-photo-product
-  if (store.img_id) {
-    const url = byImgId(store.img_id)
-    imgCache.value[store.id] = url
-    return url
-  }
-
-  // Fallback genérico
-  imgCache.value[store.id] = FALLBACK_IMG
-  return FALLBACK_IMG
-}
-
-const loadHighResImage = (store: Store) => {
-  // Si no hay img_id, no hacemos nada especial
-  if (!store.img_id) return
-
-  const hi = byImgId(store.img_id)
-  const probe = new Image()
-  probe.src = hi
-  probe.onload = () => {
-    imgCache.value[store.id] = hi
-  }
-  // Si falla, dejamos que onImgError ponga el fallback
-}
-
-const onImgError = (store: Store) => {
-  imgCache.value[store.id] = FALLBACK_IMG
-}
+const currentImage = (s: Store) => imgCache.value[s.id] || (s.img_id ? `${BACKEND_BASE}/read-photo-product/${s.img_id}` : FALLBACK_IMG)
+const loadHighResImage = (s: Store) => { if(s.img_id) { const i = new Image(); i.src = `${BACKEND_BASE}/read-photo-product/${s.img_id}`; i.onload = () => imgCache.value[s.id] = i.src } }
+const onImgError = (s: Store) => imgCache.value[s.id] = FALLBACK_IMG
 
 // ==========================================
-// UTILIDADES
+// LÓGICA PRINCIPAL DE INTERACCIÓN
 // ==========================================
-function getPostalCode(city: string): string {
-  // Ajusta si quieres códigos postales específicos por ciudad en España
-  switch (city) {
-    case 'Valencia':
-      return '46001'
-    default:
-      return 'España'
+
+// CASO 1: CLICK EN LA TARJETA DE TIENDA
+function handleStoreClick(store: Store) {
+  pendingStore.value = store
+  resetModalState()
+  modalStep.value = 'select' 
+  showModal.value = true
+}
+
+// CASO 2: SELECCIÓN EN EL BUSCADOR LATERAL
+async function onSelectSidebarSuggestion(s: PlaceSuggestion) {
+  showSidebarSuggestions.value = false
+  sidebarAddressQuery.value = s.description
+  
+  resetModalState()
+  modalStep.value = 'address' 
+  modalAddressQuery.value = s.description
+  showModal.value = true
+  
+  await fetchModalCoverage(s.place_id)
+  
+  if (modalCoverageResult.value?.nearest?.site) {
+    const found = stores.value.find(st => st.id === modalCoverageResult.value!.nearest!.site.site_id)
+    if (found) pendingStore.value = found
   }
 }
 
-function getFallbackCoords(_site: RawSite): { lat: number; lng: number } {
-  // Fallback genérico para España: centro en Valencia
-  return { lat: 39.47822439946202, lng: -0.34998759619972253 }
+// LÓGICA INTERNA DEL MODAL
+function resetModalState() {
+  modalAddressQuery.value = ''
+  modalSuggestions.value = []
+  showModalSuggestions.value = false
+  modalCoverageResult.value = null
+  calculatingCoverage.value = false
 }
 
-function getCoordsFromSite(site: RawSite): { lat: number; lng: number } {
-  if (site.location && site.location.length === 2) {
-    const [lat, lng] = site.location
-    return { lat, lng }
+function getModalTitle() {
+  if (modalStep.value === 'select') return '¿Cómo quieres tu pedido?'
+  if (modalCoverageResult.value) return 'Resultado de Cobertura'
+  return 'Ingresa tu dirección'
+}
+
+function selectPickup() {
+  if (pendingStore.value) {
+    goToStoreUrl(pendingStore.value, 'pickup')
   }
-  return getFallbackCoords(site)
 }
 
-function formatCOP(value: number | null | undefined): string {
-  if (value == null) return ''
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    maximumFractionDigits: 0
-  }).format(value)
+function goToAddressStep() {
+  modalStep.value = 'address'
 }
 
-function getStoreById(id: number): Store | undefined {
-  return stores.value.find((s) => s.id === id)
+// AUTOCOMPLETE DEL MODAL
+let modalTimeout: any = null
+function onModalAddressInput() {
+  modalCoverageResult.value = null
+  showModalSuggestions.value = true
+  if (modalTimeout) clearTimeout(modalTimeout)
+  if (!modalAddressQuery.value.trim()) return
+  modalTimeout = setTimeout(() => fetchAutocomplete(modalAddressQuery.value, 'modal'), 300)
 }
 
-// ==========================================
-// CARGA DE DATOS
-// ==========================================
-async function loadCities() {
+function onSelectModalSuggestion(s: PlaceSuggestion) {
+  modalAddressQuery.value = s.description
+  showModalSuggestions.value = false
+  fetchModalCoverage(s.place_id)
+}
+
+// API CALLS
+async function fetchModalCoverage(placeId: string) {
   try {
-    const response = await fetch(`${BACKEND_BASE}/cities`)
-    if (!response.ok) throw new Error(`Error HTTP ${response.status}`)
-    const data = (await response.json()) as City[]
-    cities.value = data.filter((c) => c.visible !== false)
-  } catch (err) {
-    console.error('Error ciudades:', err)
+    calculatingCoverage.value = true
+    const params = new URLSearchParams()
+    params.append('place_id', placeId)
+    params.append('session_token', sessionToken.value)
+    params.append('language', 'es')
+
+    const res = await fetch(`${LOCATIONS_BASE}/es/places/coverage-details?${params.toString()}`)
+    if (!res.ok) throw new Error('Err coverage')
+    const data = (await res.json()) as CoverageDetails
+    modalCoverageResult.value = data
+  } catch (e) {
+    console.error(e)
+  } finally {
+    calculatingCoverage.value = false
   }
 }
 
-async function loadStores() {
-  try {
-    const response = await fetch(`${BACKEND_BASE}/sites`)
-    if (!response.ok) throw new Error(`Error HTTP ${response.status}`)
-    const data = (await response.json()) as RawSite[]
+function confirmDeliveryAndGo() {
+  if (!modalCoverageResult.value?.nearest?.in_coverage) return
+  
+  let target = pendingStore.value
+  const apiSiteId = modalCoverageResult.value.nearest.site.site_id
+  const apiStore = stores.value.find(s => s.id === apiSiteId)
+  
+  if (apiStore) target = apiStore
 
-    // Filtramos por España (Europe/Madrid)
-    const spanishSites = data.filter(
-      (s) => s.show_on_web && s.time_zone === 'Europe/Madrid'
-    )
-
-    stores.value = spanishSites.map((s) => {
-      const { lat, lng } = getCoordsFromSite(s)
-      return {
-        id: s.site_id,
-        name: `SALCHIMONSTER ${s.site_name}`,
-        city: s.city_name,
-        cityId: s.city_id,
-        postalCode: getPostalCode(s.city_name),
-        address: s.site_address ?? 'Dirección próximamente',
-        lat,
-        lng,
-        services: ['RECOGIDA', 'EN LOCAL', 'DOMICILIO'],
-        status: 'unknown',
-        nextOpeningTime: null,
-        subdomain: s.subdomain,
-        img_id: s.img_id
-      }
+  if (target) {
+    goToStoreUrl(target, 'delivery', {
+      address: modalCoverageResult.value.formatted_address,
+      cost: modalCoverageResult.value.delivery_cost_cop
     })
-  } catch (err) {
-    console.error('Error sedes:', err)
   }
 }
 
-async function loadStatuses() {
-  const promises = stores.value.map(async (store) => {
-    try {
-      const res = await fetch(`${BACKEND_BASE}/site/${store.id}/status`)
-      if (!res.ok) throw new Error(`Error HTTP ${res.status}`)
-      const data = (await res.json()) as {
-        status: string
-        next_opening_time: string | null
-      }
-      store.status = data.status
-      store.nextOpeningTime = data.next_opening_time
-    } catch (_err) {
-      if (!store.status) store.status = 'unknown'
-    }
-  })
-  await Promise.all(promises)
+function closeModal() {
+  showModal.value = false
+  pendingStore.value = null
 }
 
 // ==========================================
-// NAVEGACIÓN A TIENDA (CONTROLADA)
+// REDIRECCIÓN CON ANIMACIÓN Y DELAY
 // ==========================================
-// 'mode' define qué datos se envían.
-// 'delivery': envía address y costo (solo desde botón cobertura).
-// 'pickup' / 'default': NO envían datos de domicilio.
-function goToStore(store: Store, mode: 'delivery' | 'pickup' | 'default') {
+function goToStoreUrl(store: Store, mode: 'delivery' | 'pickup', data?: { address: string, cost: number }) {
   if (typeof window === 'undefined') return
+  
+  // 1. Configuramos el overlay
+  redirectStoreName.value = store.name.replace('SALCHIMONSTER', '').trim() || store.name
+  closeModal() // Cerramos modal para limpiar la vista
+  isRedirecting.value = true // Activamos Blur y animación
+
   const protocol = window.location.protocol || 'http:'
   let url = `${protocol}//${store.subdomain}.salchimonster.es`
-
+  
   const params = new URLSearchParams()
-
-  // REGLA DE SEGURIDAD: Solo adjuntar datos si el modo es explícitamente 'delivery'
-  // y tenemos un resultado de cobertura válido cargado.
-  if (mode === 'delivery' && coverageResult.value) {
-    params.append('address', coverageResult.value.formatted_address)
-    if (
-      coverageResult.value.delivery_cost_cop !== undefined &&
-      coverageResult.value.delivery_cost_cop !== null
-    ) {
-      params.append(
-        'delivery_cost',
-        coverageResult.value.delivery_cost_cop.toString()
-      )
-    }
-    // Opcional: indicar que es delivery
+  if (mode === 'delivery' && data) {
+    params.append('address', data.address)
+    params.append('delivery_cost', data.cost.toString())
     params.append('modality', 'delivery')
-  } else if (mode === 'pickup') {
-    // Opcional: forzar modalidad recoger
+  } else {
     params.append('modality', 'pickup')
   }
 
-  const queryString = params.toString()
-  if (queryString) {
-    url += `?${queryString}`
-  }
+  const qs = params.toString()
+  if (qs) url += `?${qs}`
 
-  window.location.href = url
+  // 2. Retraso artificial de 2.5s para mostrar la animación
+ 
+    window.location.href = url
+ 
 }
 
-// ==========================================
-// FILTROS & MAPA
-// ==========================================
-const orderedCities = computed(() => {
-  return [...cities.value.filter((s) => ![18, 15].includes(s.city_id))].sort(
-    (a, b) => (a.index ?? 0) - (b.index ?? 0)
-  )
-})
-
-const selectedCity = computed(
-  () => cities.value.find((c) => c.city_id === selectedCityId.value) ?? null
-)
-
-const filteredStores = computed(() => {
-  let base = stores.value
-  if (selectedCityId.value)
-    base = base.filter((s) => s.cityId === selectedCityId.value)
-  const bounds = mapBounds.value
-  if (bounds) {
-    base = base.filter(
-      (s) =>
-        s.lat <= bounds.north &&
-        s.lat >= bounds.south &&
-        s.lng <= bounds.east &&
-        s.lng >= bounds.west
-    )
-  }
-  return base
-})
-
-function updateBounds() {
-  if (!map.value) return
-  const b = map.value.getBounds()
-  mapBounds.value = {
-    north: b.getNorth(),
-    south: b.getSouth(),
-    east: b.getEast(),
-    west: b.getWest()
-  }
-}
-
-onMounted(async () => {
-  const mod = await import('leaflet')
-  const L = (mod as any).default ?? mod
-  leafletModule.value = L
-
-  // Bounds para España (incluyendo Canarias de forma amplia)
-  const spainBounds = L.latLngBounds(
-    L.latLng(27.5, -18.5),
-    L.latLng(43.9, 4.5)
-  )
-
-  map.value = L.map('vicio-map', {
-    zoom: 6,
-    minZoom: 5,
-    maxZoom: 16,
-    maxBounds: spainBounds,
-    maxBoundsViscosity: 1.0,
-    zoomControl: false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    touchZoom: false,
-    boxZoom: false,
-    keyboard: false,
-    dragging: false,
-    tap: false
-  })
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap'
-  }).addTo(map.value)
-
-  const fireIcon = L.divIcon({
-    className: 'leaflet-div-icon fire-icon',
-    html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" alt="Salchimonster flame" class="fire-img" />`
-  })
-
-  dropoffIcon = L.icon({
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-  })
-
-  await Promise.all([loadCities(), loadStores()])
-  await loadStatuses()
-
-  const latlngs: [number, number][] = []
-  stores.value.forEach((store) => {
-    const marker = L.marker([store.lat, store.lng], { icon: fireIcon })
-      .addTo(map.value)
-      .bindPopup(`<strong>${store.name}</strong><br>${store.address}`)
-    markers.value[store.id] = marker
-    latlngs.push([store.lat, store.lng])
-  })
-
-  if (latlngs.length > 0) {
-    const bounds = L.latLngBounds(latlngs)
-    const zoomForSites = map.value.getBoundsZoom(bounds)
-    map.value.fitBounds(bounds, { padding: [40, 40] })
-    map.value.setMinZoom(zoomForSites)
-    initialBounds.value = bounds
-  } else {
-    initialBounds.value = spainBounds
-    map.value.fitBounds(spainBounds, { padding: [40, 40] })
-  }
-
-  // 🔥 Centrar explícitamente en Valencia, España
-  map.value.setView([39.47822439946202, -0.34998759619972253], 12)
-
-  updateBounds()
-  map.value.on('moveend', updateBounds)
-})
-
-function onCityChange() {
-  coverageResult.value = null
-  addressQuery.value = ''
-  suggestions.value = []
-  showSuggestions.value = false
-
-  if (!map.value || !leafletModule.value) return
-  const L = leafletModule.value
-  const cityIdAtClick = selectedCityId.value
-
-  if (!initialBounds.value) initialBounds.value = map.value.getBounds()
-
-  if (!cityIdAtClick) {
-    map.value.flyToBounds(initialBounds.value, {
-      padding: [40, 40],
-      animate: true,
-      duration: 0.9
-    })
+// AUTOCOMPLETE SIDEBAR
+let sidebarTimeout: any = null
+function onSidebarAddressInput() {
+  showSidebarSuggestions.value = true
+  if (sidebarTimeout) clearTimeout(sidebarTimeout)
+  if (!sidebarAddressQuery.value.trim()) {
+    sidebarSuggestions.value = []
     return
   }
-
-  const cityStores = stores.value.filter((s) => s.cityId === cityIdAtClick)
-  const latlngs: [number, number][] = cityStores.map((s) => [s.lat, s.lng])
-  if (!latlngs.length) return
-
-  const targetBounds = L.latLngBounds(latlngs)
-
-  map.value.flyToBounds(initialBounds.value, {
-    padding: [40, 40],
-    animate: true,
-    duration: 0.7
-  })
-
-  setTimeout(() => {
-    if (!map.value || selectedCityId.value !== cityIdAtClick) return
-    map.value.flyToBounds(targetBounds, {
-      padding: [40, 40],
-      animate: true,
-      duration: 0.9
-    })
-  }, 750)
+  sidebarTimeout = setTimeout(() => fetchAutocomplete(sidebarAddressQuery.value, 'sidebar'), 300)
 }
 
-// ==========================================
-// AUTOCOMPLETE
-// ==========================================
-let autocompleteTimeout: any = null
-
-function onAddressInput() {
-  coverageResult.value = null
-  showSuggestions.value = true
-
-  if (autocompleteTimeout) clearTimeout(autocompleteTimeout)
-
-  const query = addressQuery.value.trim()
-  if (!query) {
-    suggestions.value = []
-    loadingAutocomplete.value = false
-    return
-  }
-
-  autocompleteTimeout = setTimeout(() => {
-    fetchAutocomplete(query)
-  }, 300)
-}
-
-async function fetchAutocomplete(query: string) {
+async function fetchAutocomplete(query: string, origin: 'sidebar' | 'modal') {
   try {
-    loadingAutocomplete.value = true
+    if (origin === 'sidebar') loadingSidebar.value = true
+    else loadingModalAutocomplete.value = true
+    
     const params = new URLSearchParams()
     params.append('input', query)
     params.append('language', 'es')
     params.append('countries', 'es')
     params.append('limit', '5')
     params.append('session_token', sessionToken.value)
-
-    if (
-      selectedCity.value &&
-      !selectedCity.value.city_name.toLowerCase().includes('solo pick up')
-    ) {
-      params.append('city', selectedCity.value.city_name)
-    }
-
-    const res = await fetch(
-      `${LOCATIONS_BASE}/es/places/autocomplete?${params.toString()}`
-    )
-    if (!res.ok) throw new Error('Error autocomplete')
+    
+    const res = await fetch(`${LOCATIONS_BASE}/es/places/autocomplete?${params.toString()}`)
     const data = await res.json()
-    const preds = Array.isArray(data.predictions) ? data.predictions : []
-    suggestions.value = preds.map((p: any) => ({
-      place_id: p.place_id,
-      description: p.description || ''
-    }))
-  } catch (e) {
-    console.error(e)
-    suggestions.value = []
+    const mapped = (data.predictions || []).map((p: any) => ({ place_id: p.place_id, description: p.description || '' }))
+
+    if (origin === 'sidebar') sidebarSuggestions.value = mapped
+    else modalSuggestions.value = mapped
+  } catch(e) { 
+    console.error(e) 
   } finally {
-    loadingAutocomplete.value = false
+    loadingSidebar.value = false
+    loadingModalAutocomplete.value = false
   }
 }
 
-function onSelectSuggestion(s: PlaceSuggestion) {
-  addressQuery.value = s.description
-  showSuggestions.value = false
-  suggestions.value = []
-  fetchCoverageDetails(s.place_id)
+// UTILS
+function formatCOP(val: number | null | undefined) {
+  if (val == null) return ''
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val)
 }
 
-async function fetchCoverageDetails(placeId: string) {
+// CARGA INICIAL
+async function loadData() {
   try {
-    const params = new URLSearchParams()
-    params.append('place_id', placeId)
-    params.append('session_token', sessionToken.value)
-    params.append('language', 'es')
-
-    const res = await fetch(
-      `${LOCATIONS_BASE}/es/places/coverage-details?${params.toString()}`
-    )
-    if (!res.ok) throw new Error('Error coverage')
-
-    const data = (await res.json()) as CoverageDetails
-    coverageResult.value = data
-
-    if (!map.value || !leafletModule.value) return
-    const L = leafletModule.value
-
-    if (data.lat != null && data.lng != null) {
-      if (dropoffMarker.value) map.value.removeLayer(dropoffMarker.value)
-      dropoffMarker.value = L.marker([data.lat, data.lng], {
-        icon: dropoffIcon
-      }).addTo(map.value)
-    }
-
-    let nearestStore: Store | undefined
-    if (data.nearest && data.nearest.site) {
-      nearestStore = stores.value.find(
-        (s) => s.id === data.nearest!.site.site_id
-      )
-    }
-
-    if (nearestStore) {
-      const cityId = nearestStore.cityId
-      selectedCityId.value = cityId
-      selectedStoreId.value = nearestStore.id
-
-      const cityStores = stores.value.filter((s) => s.cityId === cityId)
-      const latlngs: [number, number][] = cityStores.map((s) => [s.lat, s.lng])
-
-      if (latlngs.length > 0) {
-        if (!initialBounds.value) initialBounds.value = map.value.getBounds()
-
-        const targetBounds = L.latLngBounds(latlngs)
-        const cityIdAtMoment = cityId
-
-        map.value.flyToBounds(initialBounds.value, {
-          padding: [40, 40],
-          animate: true,
-          duration: 0.7
-        })
-
-        setTimeout(() => {
-          if (!map.value || selectedCityId.value !== cityIdAtMoment) return
-          map.value.flyToBounds(targetBounds, {
-            padding: [40, 40],
-            animate: true,
-            duration: 0.9
-          })
-        }, 750)
-
-        const marker = markers.value[nearestStore!.id]
-        if (marker) marker.openPopup()
-        return
-      }
-    }
-
-    if (data.lat != null && data.lng != null) {
-      map.value.setView([data.lat, data.lng], 14, { animate: true })
-    }
-  } catch (e) {
-    console.error(e)
-  }
+    const resStores = await fetch(`${BACKEND_BASE}/sites`)
+    const rawStores = (await resStores.json()) as RawSite[]
+    stores.value = rawStores
+      .filter(s => s.show_on_web && s.time_zone === 'Europe/Madrid')
+      .map(s => ({
+        id: s.site_id, name: `SALCHIMONSTER ${s.site_name}`, city: s.city_name, cityId: s.city_id,
+        address: s.site_address ?? '', lat: s.location?.[0] ?? 40.416, lng: s.location?.[1] ?? -3.703,
+        services: ['RECOGIDA', 'DOMICILIO'], status: 'unknown', subdomain: s.subdomain, img_id: s.img_id
+      }))
+    
+    stores.value.forEach(async (s) => {
+      try {
+        const r = await fetch(`${BACKEND_BASE}/site/${s.id}/status`)
+        const d = await r.json()
+        s.status = d.status
+      } catch {}
+    })
+  } catch(e) { console.error(e) }
 }
+
+const filteredStores = computed(() => stores.value)
+
+onMounted(async () => {
+  await loadData()
+  const mod = await import('leaflet')
+  const L = (mod as any).default ?? mod
+  leafletModule.value = L
+
+  map.value = L.map('vicio-map', { zoomControl: false }).setView([40.416, -3.703], 6)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
+  
+  const fireIcon = L.divIcon({ className: 'leaflet-div-icon fire-icon', html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" />` })
+
+  stores.value.forEach(s => {
+    L.marker([s.lat, s.lng], { icon: fireIcon }).addTo(map.value).bindPopup(`<strong>${s.name}</strong>`)
+  })
+})
+
+watch(() => modalStep.value, (val) => {
+  if (val === 'address' && !modalAddressQuery.value) {
+    nextTick(() => modalInputRef.value?.focus())
+  }
+})
 </script>
 
-
 <style scoped>
-/* =========================================
-   ESTILOS GENERALES
-   ========================================= */
-.vicio-page {
-  display: flex; min-height: 100vh; width: 100%; overflow-x: hidden;
-  background: var(--bg-page); color: var(--text-primary); font-family: 'Roboto', sans-serif;
-}
+/* ESTRUCTURA GENERAL */
+.vicio-page { display: flex; min-height: 100vh; width: 100%; font-family: 'Roboto', sans-serif; background: #f8fafc; }
 .vicio-map { flex: 1 1 55%; height: 100vh; background: #e2e8f0; }
+.vicio-sidebar { flex: 1 1 45%; display: flex; flex-direction: column; background: #fff; box-shadow: -5px 0 20px rgba(0,0,0,0.05); z-index: 20; position: relative; }
 
-/* SIDEBAR */
-.vicio-sidebar {
-  flex: 1 1 45%; display: flex; flex-direction: column;
-  background: #ffffff; border-left: 1px solid var(--border-subtle);
-  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.05); max-height: 100vh;
-}
-.sidebar-header {
-  padding: 1.4rem 1.8rem 1rem; border-bottom: 1px solid var(--border-subtle);
-  background: #ffffff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-  position: relative; z-index: 5;
-}
-.sidebar-title {
-  font-size: 0.82rem; letter-spacing: 0.18em; font-weight: 800; margin: 0 0 0.9rem;
-  text-transform: uppercase; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;
-}
-.sidebar-title::before { content: "🔥"; font-size: 1rem; }
+.sidebar-header { padding: 1.5rem; background: #fff; border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 6px rgba(0,0,0,0.02); z-index: 10; }
+.sidebar-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; margin-bottom: 1rem; color: #1e293b; letter-spacing: 0.05em; }
 
-/* SELECT CIUDAD */
-.city-select-wrapper { margin-bottom: 0.9rem; }
-.city-label {
-  display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.12em; color: var(--text-soft); margin-bottom: 0.35rem;
-}
-.city-select-container { position: relative; display: flex; align-items: center; }
-.city-select {
-  width: 100%; padding: 0.55rem 2.4rem 0.55rem 0.9rem;
-  border-radius: 0.55rem; border: 1px solid var(--border-subtle);
-  font-size: 0.86rem; outline: none; background: #ffffff; color: var(--text-primary);
-  cursor: pointer; appearance: none;
-}
-.city-select:hover { border-color: var(--accent); background-color: #f8fafc; }
-.city-select-arrow {
-  position: absolute; right: 0.9rem; pointer-events: none;
-  display: flex; color: var(--text-primary);
-}
+/* INPUT SIDEBAR */
+.search-wrapper { position: relative; }
+.search-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #e2e8f0; border-radius: 0.6rem; background: #f8fafc; font-size: 0.95rem; outline: none; box-sizing: border-box; }
+.search-input:focus { background: #fff; border-color: #ff6600; box-shadow: 0 0 0 3px rgba(255,102,0,0.1); }
 
-/* SEARCH */
-.search-wrapper { position: relative; display: flex; flex-direction: column; gap: 0.25rem; }
-.search-input {
-  padding: 0.55rem 1rem; border-radius: 0.55rem; border: 1px solid var(--border-subtle);
-  font-size: 0.9rem; background: #f1f5f9; outline: none;
-}
-.search-input:focus { background: #ffffff; border-color: var(--accent); }
+/* LISTA SEDES */
+.stores-list { flex: 1; overflow-y: auto; padding: 0; }
+.store-item { display: flex; padding: 1rem 1.5rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; align-items: center; gap: 1rem; transition: background 0.2s; }
+.store-item:hover { background: #f8fafc; }
+.store-img-wrapper { width: 70px; height: 70px; border-radius: 0.5rem; overflow: hidden; background: #eee; flex-shrink: 0; }
+.store-img { width: 100%; height: 100%; object-fit: cover; }
+.store-info { flex: 1; }
+.store-name { margin: 0; font-size: 1rem; font-weight: 800; color: #0f172a; }
+.store-services { font-size: 0.7rem; color: #ff6600; font-weight: 700; margin: 0.2rem 0; }
+.store-address { font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; }
+.store-action { border: none; font-size: 0.7rem; font-weight: 700; padding: 0.3rem 0.6rem; border-radius: 20px; display: inline-flex; align-items: center; gap: 0.3rem; }
+.store-action[data-status='open'] { background: #dcfce7; color: #15803d; }
+.store-action[data-status='closed'] { background: #fee2e2; color: #991b1b; }
+.store-arrow { width: 32px; height: 32px; border-radius: 50%; background: #000; color: #fff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
-/* AUTOCOMPLETE */
-.autocomplete-list {
-  position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.35rem;
-  background: #ffffff; border-radius: 0.55rem; border: 1px solid var(--border-subtle);
-  max-height: 220px; overflow-y: auto; list-style: none; padding: 0.25rem 0;
-  z-index: 20; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-}
-.autocomplete-item {
-  padding: 0.6rem 1rem; font-size: 0.86rem; cursor: pointer;
-  display: flex; align-items: center; gap: 0.55rem;
-}
-.autocomplete-item:hover { background: #fff7ed; color: var(--accent); }
-.item-icon { color: var(--text-soft); font-size: 1.1em; }
-.autocomplete-empty, .autocomplete-loading { padding: 0.8rem; text-align: center; font-size: 0.8rem; color: #888; }
+/* AUTOCOMPLETE LISTS */
+.autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 0.5rem; margin-top: 0.5rem; list-style: none; padding: 0; z-index: 50; box-shadow: 0 10px 15px rgba(0,0,0,0.05); max-height: 250px; overflow-y: auto; }
+.autocomplete-item { padding: 0.8rem 1rem; cursor: pointer; display: flex; gap: 0.5rem; font-size: 0.9rem; color: #334155; }
+.autocomplete-item:hover { background: #fff7ed; color: #ea580c; }
+.autocomplete-loading { padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.8rem; }
 
-/* COVERAGE CARD */
-.coverage-card {
-  margin: 1rem 1.8rem; background-color: #ffffff;
-  border: 1px solid #e2e8f0; border-radius: 0.75rem; overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-}
-.coverage-header {
-  background: #f8fafc; padding: 0.75rem 1rem; display: flex;
-  align-items: center; gap: 0.5rem; border-bottom: 1px solid #e2e8f0;
-}
-.coverage-icon { color: #ff6600; }
-.coverage-title { margin: 0; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: #334155; }
-.coverage-body { padding: 1rem; font-size: 0.9rem; }
-.coverage-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
-.coverage-label { color: #64748b; font-weight: 500; font-size: 0.85rem; }
-.coverage-value { color: #1e293b; font-weight: 600; text-align: right; max-width: 60%; }
-.coverage-value.address-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.coverage-value.price { color: #16a34a; font-weight: 800; font-size: 1rem; }
-.coverage-status-text { margin-top: 0.8rem; padding-top: 0.5rem; border-top: 1px dashed #e2e8f0; text-align: center; font-size: 0.85rem; font-weight: 700; }
-.text-ok { color: #15803d; }
-.text-fail { color: #b91c1c; }
+/* ESTILOS MODAL */
+.modal-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
 
-/* BOTONES DE ACCIÓN DE COBERTURA */
-.coverage-actions {
-    display: flex; gap: 0.8rem; padding: 0 1rem 1rem; flex-wrap: wrap;
+.modal-content {
+  background: #ffffff; width: 90%; max-width: 420px; border-radius: 1rem;
+  overflow: visible; 
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex; flex-direction: column; position: relative;
+  animation: modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.btn-action {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-    padding: 0.7rem; border-radius: 0.5rem; font-size: 0.85rem; font-weight: 700;
-    text-transform: uppercase; cursor: pointer; border: none; transition: transform 0.1s;
-}
-.btn-action:active { transform: scale(0.97); }
-.btn-delivery {
-    background-color: #ff6600; color: #ffffff; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.25);
-}
-.btn-delivery:hover { background-color: #e65c00; }
-.btn-pickup {
-    background-color: #ffffff; color: #334155; border: 2px solid #e2e8f0;
-}
-.btn-pickup:hover { border-color: #334155; background-color: #f8fafc; }
+@keyframes modalPop { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* LISTA DE SEDES */
-.stores-list { flex: 1; overflow-y: auto; padding: 0.45rem 0; background: #ffffff; }
-.store-item {
-  display: flex; align-items: center; justify-content: flex-start;
-  padding: 0.95rem 1.8rem; border-bottom: 1px solid #f1f5f9;
-  cursor: pointer; gap: 1rem; transition: all 0.15s ease;
-}
-.store-item:hover { background: #f8fafc; transform: translateY(-1px); }
-.store-item--active { background: #fff7ed; border-left: 3px solid #ff6600; }
+.modal-header { padding: 1.5rem 1.5rem 1rem; text-align: center; background: #fff; border-radius: 1rem 1rem 0 0; }
+.modal-title { margin: 0; font-size: 1.2rem; font-weight: 800; color: #0f172a; }
+.modal-subtitle { margin: 0.2rem 0 0; font-size: 0.9rem; color: #64748b; }
+.modal-close { position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; cursor: pointer; color: #94a3b8; }
+.modal-close:hover { color: #0f172a; }
 
-/* IMAGEN SEDE */
-.store-img-wrapper {
-  width: 90px; height: 90px; flex-shrink: 0; border-radius: 0.5rem;
-  overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background-color: #f1f5f9;
-}
-.store-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
-.store-item:hover .store-img { transform: scale(1.05); }
+.modal-actions { padding: 0 1.5rem 2rem; display: flex; flex-direction: column; gap: 0.8rem; }
+.modal-btn { display: flex; align-items: center; gap: 1rem; padding: 1rem; border-radius: 0.8rem; border: none; cursor: pointer; text-align: left; transition: transform 0.1s; }
+.modal-btn:active { transform: scale(0.98); }
+.modal-btn div { display: flex; flex-direction: column; }
+.modal-btn span { font-weight: 800; font-size: 1rem; text-transform: uppercase; }
+.modal-btn small { font-size: 0.8rem; font-weight: 500; opacity: 0.8; }
 
-/* INFO */
-.store-info { flex: 1; display: flex; flex-direction: column; gap: 0.2rem; }
-.store-name { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text-primary); }
-.store-services { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #ff6600; letter-spacing: 0.12em; }
-.store-address { font-size: 0.84rem; color: var(--text-soft); margin-bottom: 0.4rem; }
+.btn-pickup { background: #f1f5f9; color: #334155; }
+.btn-pickup:hover { background: #e2e8f0; }
+.btn-delivery { background: #ff6600; color: #fff; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.2); }
+.btn-delivery:hover { background: #ea580c; }
 
-/* BOTÓN ESTADO */
-.store-action {
-  align-self: flex-start; border: none; font-size: 0.72rem; font-weight: 800;
-  padding: 0.38rem 0.85rem; border-radius: 999px; text-transform: uppercase;
-  letter-spacing: 0.12em; display: inline-flex; align-items: center;
-}
-.status-flex { display: flex; align-items: center; gap: 0.35rem; }
-.store-action[data-status='open'] { background: #dcfce7; color: #166534; }
-.store-action[data-status='closed'], .store-action[data-status='close'] { background: #fee2e2; color: #991b1b; }
-.store-action[data-status='unknown'] { background: #f1f5f9; color: #94a3b8; }
+.modal-address-step { padding: 0 1.5rem 2rem; display: flex; flex-direction: column; gap: 1rem; min-height: 200px; }
+.modal-input-wrapper { position: relative; z-index: 100; }
+.modal-search-input { width: 100%; padding: 0.8rem; border: 2px solid #e2e8f0; border-radius: 0.5rem; font-size: 1rem; box-sizing: border-box; outline: none; }
+.modal-search-input:focus { border-color: #ff6600; }
 
-/* FLECHA */
-.store-arrow {
-  background: #000000; color: #ffffff; width: 40px; height: 40px;
-  border-radius: 50%; border: none; cursor: pointer; display: flex;
-  align-items: center; justify-content: center; transition: transform 0.2s ease, background 0.2s ease;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2); flex-shrink: 0;
-}
-.store-arrow:hover { background: #333333; transform: scale(1.1); }
-.no-results { padding: 2rem; text-align: center; color: #64748b; font-size: 0.9rem; }
+.modal-autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e2e8f0; max-height: 200px; overflow-y: auto; z-index: 999; margin-top: 4px; border-radius: 0.5rem; box-shadow: 0 10px 20px rgba(0,0,0,0.1); list-style: none; padding: 0; }
+.modal-autocomplete-item { padding: 0.8rem; border-bottom: 1px solid #f8fafc; font-size: 0.9rem; cursor: pointer; display: flex; gap: 0.5rem; }
+.modal-autocomplete-item:hover { background: #fff7ed; color: #ea580c; }
 
-/* LEAFLET & RESPONSIVE */
-:global(.leaflet-div-icon.fire-icon) { width: 42px !important; height: 42px !important; border: none; background: transparent; display: flex; align-items: center; justify-content: center; }
+.modal-coverage-result { background: #f8fafc; padding: 1rem; border-radius: 0.8rem; border: 1px solid #e2e8f0; }
+.result-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem; }
+.result-row .label { color: #64748b; }
+.result-row .value { font-weight: 700; color: #0f172a; text-align: right; }
+.result-row .highlight-store { color: #ff6600; }
+.result-row .price { color: #16a34a; font-size: 1.1rem; }
+.result-row .address { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+
+.result-status { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed #cbd5e1; text-align: center; font-weight: 800; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-transform: uppercase; }
+.status-ok { color: #16a34a; }
+.status-fail { color: #ef4444; }
+
+.modal-confirm-btn { width: 100%; background: #0f172a; color: #fff; padding: 1rem; border: none; border-radius: 0.5rem; font-weight: 700; margin-top: 1rem; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.modal-confirm-btn:hover { background: #334155; }
+.modal-back-link { background: none; border: none; text-decoration: underline; color: #94a3b8; cursor: pointer; margin-top: 0.5rem; font-size: 0.85rem; }
+.coverage-loading { text-align: center; padding: 2rem; color: #64748b; }
+.spin-icon { animation: spin 1s linear infinite; color: #ff6600; margin-bottom: 0.5rem; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+:global(.leaflet-div-icon.fire-icon) { width: 42px!important; height: 42px!important; background: transparent; border: none; }
 :global(.leaflet-div-icon.fire-icon .fire-img) { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
 :deep(.leaflet-tile) { filter: grayscale(100%) !important; }
 
-/* LAYOUT MOVIL */
 @media (max-width: 900px) {
   .vicio-page { flex-direction: column; height: 100vh; overflow: hidden; }
-  .vicio-map { flex: 0 0 40%; height: 40% !important; width: 100%; z-index: 10; }
-  .vicio-sidebar {
-    flex: 1 1 60%; height: 60% !important; width: 100%;
-    overflow: hidden; 
-    border-radius: 1.5rem 1.5rem 0 0;
-    margin-top: -1.5rem;
-    z-index: 20;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
-  }
-  .stores-list { flex: 1; overflow-y: auto; padding-bottom: 2rem; }
-  .sidebar-header { flex-shrink: 0; position: sticky; top: 0; }
-  .store-img-wrapper { width: 70px; height: 70px; }
-  .store-item { padding: 0.8rem 1rem; }
-  .coverage-card { margin: 1rem; }
+  .vicio-map { flex: 0 0 40%; height: 40% !important; }
+  .vicio-sidebar { flex: 1 1 60%; height: 60% !important; border-radius: 1.5rem 1.5rem 0 0; margin-top: -1.5rem; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); }
+  .modal-content { width: 95%; max-width: none; border-radius: 1rem 1rem 0 0; position: absolute; bottom: 0; animation: slideUpMobile 0.3s ease-out; }
+  @keyframes slideUpMobile { from { transform: translateY(100%); } to { transform: translateY(0); } }
 }
+
+/* =========================================
+   OVERLAY DE REDIRECCIÓN (ANIMACIÓN)
+   ========================================= */
+.redirect-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(255, 255, 255, 0.7); /* Fondo blanco con transparencia */
+  backdrop-filter: blur(15px); /* Desenfoque fuerte */
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.redirect-content {
+  text-align: center;
+  animation: popIn 0.5s ease-out;
+}
+
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.redirect-spinner {
+  position: relative;
+  display: inline-flex;
+  margin-bottom: 2rem;
+  color: #ff6600;
+}
+
+.rocket-icon {
+  z-index: 2;
+  animation: rocketFloat 1.5s ease-in-out infinite alternate;
+}
+
+.pulse-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  border: 2px solid #ff6600;
+  opacity: 0;
+  animation: pulse 2s infinite;
+}
+
+.redirect-title {
+  font-size: 1.2rem;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.redirect-store {
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0.5rem 0;
+  line-height: 1.1;
+  max-width: 90vw;
+}
+
+.redirect-subtitle {
+  font-size: 1rem;
+  color: #94a3b8;
+  margin-top: 1rem;
+}
+
+@keyframes rocketFloat {
+  from { transform: translateY(0); }
+  to { transform: translateY(-10px); }
+}
+
+@keyframes pulse {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+}
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
