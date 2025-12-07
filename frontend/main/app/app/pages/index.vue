@@ -422,6 +422,7 @@ function goToStoreUrl(store: Store, mode: 'delivery' | 'pickup', data?: { addres
   // 2. Retraso artificial de 2.5s para mostrar la animación
   setTimeout(() => {
     window.location.href = url
+    
   }, 2500)
 }
 
@@ -495,6 +496,7 @@ async function loadData() {
 const filteredStores = computed(() => stores.value)
 
 onMounted(async () => {
+  isRedirecting.value = false // Activamos Blur y animación
   await loadData()
   const mod = await import('leaflet')
   const L = (mod as any).default ?? mod
