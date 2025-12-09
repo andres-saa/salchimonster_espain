@@ -27,6 +27,7 @@
           />
 
           <img 
+            ref="mainImageRef"
             :src="highResUrl" 
             :alt="displayName" 
             class="img-main"
@@ -245,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
 import { usecartStore, useFetch, useHead, useSitesStore } from '#imports'
@@ -269,9 +270,23 @@ const showChangeDialog = ref(false)
 
 // Estado de carga de imagen para transición
 const imageLoaded = ref(false)
+const mainImageRef = ref(null) // Referencia al elemento IMG
+
 const onImageLoad = () => {
   imageLoaded.value = true
 }
+
+// Función auxiliar: verifica si el navegador ya tenía la imagen en caché
+const checkImageState = () => {
+  if (mainImageRef.value?.complete) {
+    imageLoaded.value = true
+  }
+}
+
+// Verificar al montar (soluciona refresh y links externos)
+onMounted(() => {
+  checkImageState()
+})
 
 // --- DATA FETCHING ---
 const { data: rawCategoriesData, pending: loading } = useFetch(
@@ -314,34 +329,26 @@ const showOriginalPrice = computed(() => discountAmount.value > 0)
 const displayName = computed(() => currentProduct.value?.productogeneral_descripcion || currentProduct.value?.product_name || '')
 const productDescription = computed(() => currentProduct.value?.productogeneral_descripcionadicional || currentProduct.value?.productogeneral_descripcionweb || 'Sin descripción detallada.')
 
-// --- OPTIMIZACIÓN DE IMAGEN (NUEVA LÓGICA) ---
-
-// 1. URL de vista previa (Low Res): Coincide con la lógica del menú para aprovechar la caché del navegador
+// --- OPTIMIZACIÓN DE IMAGEN ---
 const previewUrl = computed(() => {
   const p = currentProduct.value
   if (!p) return ''
-  // Si tiene identificador interno, usamos la ruta de 400px (la misma del card)
   if (p.img_identifier) return `${URI}/read-photo-product/${p.img_identifier}/400`
-  // Fallbacks estándar
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url) return p.image_url
   return ''
 })
 
-// 2. URL Principal (High Res): Usamos una versión de mayor calidad
 const highResUrl = computed(() => {
   const p = currentProduct.value
   if (!p) return '/placeholder.png'
-  // Pedimos la versión de 600px o superior para el detalle
   if (p.img_identifier) return `${URI}/read-photo-product/${p.img_identifier}/600`
-  
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url) return p.image_url
   return '/placeholder.png'
 })
 
-
-// --- LÓGICA DE GRUPOS Y LÍMITES (Igual) ---
+// --- LÓGICA DE GRUPOS Y LÍMITES ---
 const groupLimits = computed(() => {
   const p = currentProduct.value
   if (!p || !Array.isArray(p.lista_agrupadores)) return {}
@@ -380,7 +387,7 @@ const calculateTotal = () => {
   return total
 }
 
-// --- HANDLERS (Igual) ---
+// --- HANDLERS ---
 const handleRowClick = (mod, groupId) => {
   const limits = groupLimits.value[String(groupId)]
   if (!limits.multiple) {
@@ -496,19 +503,25 @@ const goToRelative = (step) => {
 const goToNext = () => goToRelative(1)
 const goToPrev = () => goToRelative(-1)
 
-watch(currentProduct, (newVal) => {
+watch(currentProduct, async (newVal) => {
   if (newVal) {
     imageLoaded.value = false // Reset loading
     quantity.value = 1
     selectedAdditions.value = {}
     checkedAddition.value = {}
     exclusive.value = {}
+    
     newVal.lista_agrupadores?.forEach((g) => {
       const lim = groupLimits.value[String(g.modificador_id)]
       if (lim && lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
         handleAdditionChange(g.listaModificadores[0], g.modificador_id)
       }
     })
+
+    // Esperar a que el DOM se actualice para verificar si la nueva imagen
+    // ya estaba en caché y completó su carga
+    await nextTick()
+    checkImageState()
   }
 }, { immediate: true })
 
