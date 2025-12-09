@@ -332,7 +332,7 @@ onBeforeUnmount(() => {
 
 .post-card {
   position: relative;
-  border-radius: 1.2rem;
+  border-radius: .5rem;
   overflow: hidden;
   aspect-ratio: 4/5; /* Formato vertical moderno */
   box-shadow: 0 10px 25px rgba(0,0,0,0.1);

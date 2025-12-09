@@ -1,6 +1,20 @@
 <template>
   <div class="checkout-page">
     
+    <Transition name="fade">
+      <div v-if="isRedirecting" class="redirect-overlay">
+        <div class="redirect-content">
+          <div class="redirect-spinner">
+            <Icon name="mdi:rocket-launch-outline" size="3em" class="rocket-icon" />
+            <div class="pulse-ring"></div>
+          </div>
+          <h2 class="redirect-title">Te estamos llevando a</h2>
+          <h3 class="redirect-store">{{ targetSiteName }}</h3>
+          <p class="redirect-subtitle">Transfiriendo tu pedido...</p>
+        </div>
+      </div>
+    </Transition>
+    
     <Transition name="modal-fade">
       <div v-if="see_sites" class="modal-backdrop" @click.self="closeModal">
         <div class="modal-container">
@@ -79,7 +93,7 @@
             <button 
               class="btn btn-primary" 
               @click="confirmSelection" 
-              :disabled="!tempSiteData?.in_coverage"
+              :disabled="!tempSiteData?.in_coverage || isRedirecting"
             >
               {{ t('save') }}
             </button>
@@ -188,7 +202,7 @@
                       {{ siteStore?.location?.neigborhood?.delivery_price ? formatCOP(siteStore.location.neigborhood.delivery_price) : 'Envío Gratis' }}
                     </span>
                     <span v-if="siteStore?.location?.site?.site_name" class="site-name">
-                       • Desde {{ siteStore.location.site.site_name }}
+                        • Desde {{ siteStore.location.site.site_name }}
                     </span>
                   </div>
                 </div>
@@ -290,10 +304,7 @@
 </template>
 
 <script setup>
-/* NOTA: He mantenido tu lógica JS casi intacta.
-  Solo asegúrate de que tus imports (#imports, ~/service) sean correctos en tu proyecto.
-*/
-import { ref, onMounted, watch, computed, onBeforeUnmount } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import resumen from '../resumen.vue'
 import { usecartStore, useSitesStore, useUserStore } from '#imports'
 import { URI } from '~/service/conection'
@@ -313,6 +324,11 @@ const payment_method_catalog = ref([])
 const sitePaymentsComplete = ref([])
 const sites = ref([])
 
+// ESTADO PARA LA REDIRECCIÓN
+const isRedirecting = ref(false)
+const targetSiteName = ref('')
+const MAIN_DOMAIN = 'salchimonster.com' // Ajustar extensión según ambiente
+
 const DEFAULT_ORDER_TYPES = Object.freeze([
   { id: 3, name: 'Enviar a domicilio', english_name: 'Delivery' },
   { id: 2, name: 'Recoger', english_name: 'Pickup' }
@@ -326,7 +342,7 @@ const DICT = {
     finalize_purchase: 'Finalizar Compra', name: 'Nombre Completo', phone: 'Celular', site_recoger: 'Sede para Recoger', 
     payment_method: 'Método de Pago', notes: 'Notas del pedido', code: '¿Tienes un cupón?', 
     site_selector: 'Seleccionar ubicación', address_placeholder: 'Buscar dirección (Ej: Calle 123...)', in_coverage: '¡Estás en zona de cobertura!',
-    not_in_coverage: 'Fuera de cobertura', distance: 'Distancia', km: 'km', ships_from_site: 'Te enviamos desde',
+    not_in_coverage: 'Fuera de cobertura', distance: 'Distancia', km: 'km', ships_from_site: 'Te enviamos desde ',
     delivery_price: 'Costo Domicilio', cancel: 'Cancelar', save: 'Confirmar ubicación', email: 'Correo Electrónico',
     vehicle_plate: 'Placa del vehículo', additional_notes: 'Ej: Timbre dañado, dejar en portería...', 
     search_country_or_code: 'Buscar país...', address: 'Dirección de Entrega', code_placeholder: 'Ingresa el código'
@@ -400,20 +416,97 @@ const onAddressSelect = async (item) => {
   } finally { isValidating.value = false }
 }
 
-const confirmSelection = () => {
+/* ================= LÓGICA DE CONFIRMACIÓN Y REDIRECCIÓN ================= */
+const confirmSelection = async () => {
   if (!tempSiteData.value?.in_coverage) return
-  user.user.site = tempSiteData.value
-  user.user.address = tempSiteData.value.formatted_address
-  user.user.lat = tempSiteData.value.lat
-  user.user.lng = tempSiteData.value.lng
-  user.user.place_id = tempSiteData.value.place_id
-  siteStore.location.site = tempSiteData.value.nearest.site
-  store.address_details = tempSiteData.value
-  if (tempSiteData.value.delivery_cost_cop != null) {
-      siteStore.location.neigborhood.delivery_price = tempSiteData.value.delivery_cost_cop
+
+  const currentSiteId = siteStore.location?.site?.site_id
+  const newSiteId = tempSiteData.value.nearest?.site?.site_id
+
+  // SI LA SEDE CAMBIA Y EXISTÍA UNA PREVIA, INICIAMOS REDIRECCIÓN
+  if (currentSiteId && newSiteId && String(currentSiteId) !== String(newSiteId)) {
+    await handleSiteChange(tempSiteData.value)
+    return // Detenemos la ejecución local
+  }
+
+  // SI ES LA MISMA SEDE O LA PRIMERA SELECCIÓN, ACTUALIZAMOS LOCALMENTE
+  applySiteSelection(tempSiteData.value)
+  closeModal()
+}
+
+const applySiteSelection = (data) => {
+  user.user.site = data
+  user.user.address = data.formatted_address
+  user.user.lat = data.lat
+  user.user.lng = data.lng
+  user.user.place_id = data.place_id
+  siteStore.location.site = data.nearest.site
+  store.address_details = data
+  if (data.delivery_cost_cop != null) {
+      siteStore.location.neigborhood.delivery_price = data.delivery_cost_cop
   }
   ensureValidOrderTypeForCurrentSite()
-  closeModal()
+}
+
+// Función para manejar el cambio de dominio/sede
+const handleSiteChange = async (newData) => {
+  isRedirecting.value = true
+  const site = newData.nearest?.site
+  targetSiteName.value = site?.site_name || 'Nueva Sede'
+  
+  try {
+    // 1. Generar Hash
+    const hash = crypto.randomUUID()
+
+    // 2. Preparar Payload
+    const payload = {
+      user: {
+        ...user.user,
+        site: newData, 
+        address: newData.formatted_address,
+        lat: newData.lat,
+        lng: newData.lng,
+        place_id: newData.place_id
+      },
+      cart: store.cart, 
+      site_location: site 
+    }
+
+    // 3. Enviar datos al backend (PUT)
+    await fetch(`${URI}/data/${hash}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    // 4. Obtener Subdominio
+    const subdomain = newData.subdomain
+
+    if (!subdomain) {
+      alert('Lo sentimos, no pudimos localizar la dirección web de esta sede.')
+      isRedirecting.value = false
+      return
+    }
+
+    const isDev = window.location.hostname.includes('localhost')
+    const protocol = window.location.protocol
+    
+    // Construcción de URL
+    let targetUrl = ''
+    if (isDev) {
+      targetUrl = `${protocol}//${subdomain}.localhost:3000/pay?hash=${hash}`
+    } else {
+      targetUrl = `https://${subdomain}.${MAIN_DOMAIN}/pay?hash=${hash}`
+    }
+    
+    // 5. Redirigir
+    window.location.href = targetUrl
+
+  } catch (error) {
+    console.error('Error switching site:', error)
+    alert('Ocurrió un error al cambiar de sede. Intenta nuevamente.')
+    isRedirecting.value = false
+  }
 }
 
 /* ================= TELÉFONO ================= */
@@ -425,7 +518,6 @@ const countryQuery = ref('')
 
 const norm = (s) => (s || '').toString().trim().toLowerCase()
 const onlyDigits = (s) => (s || '').replace(/\D+/g, '')
-const toFlagEmoji = (iso2) => iso2 ? iso2.toUpperCase().split('').map(c => String.fromCodePoint(0x1f1e6 - 65 + c.charCodeAt(0))).join('') : '🏳️'
 
 const initCountries = () => {
     countries.value = buildCountryOptions(lang.value).map(c => ({
@@ -494,7 +586,6 @@ const getPaymentOptionsFor = (site_id, order_type_id) => {
       const pm = payment_method_catalog.value.find(p => p.id === m.id || p.id === m)
       return pm ? { ...pm, ...m } : m
   })
-  if (Number(order_type_id) === 3) methods = methods.filter(m => m.id !== 8)
   return methods
 }
 
@@ -602,6 +693,63 @@ watch(lang, initCountries)
 }
 
 /* =========================================
+   ANIMACIÓN DE REDIRECCIÓN (COHETE)
+   ========================================= */
+.redirect-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100dvh;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 99999;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.redirect-content { 
+    text-align: center; 
+    animation: popIn 0.5s ease-out; 
+}
+
+.redirect-spinner { 
+    position: relative; 
+    display: inline-flex; 
+    margin-bottom: 2rem; 
+    color: #ff6600; 
+}
+
+.rocket-icon { 
+    z-index: 2; 
+    animation: rocketFloat 1.5s ease-in-out infinite alternate; 
+    color: #ff6600;
+}
+
+.pulse-ring {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 80px; height: 80px; border-radius: 50%; border: 2px solid #ff6600;
+  opacity: 0; animation: pulse 2s infinite;
+}
+
+.redirect-title { 
+    font-size: 1.2rem; color: #64748b; margin: 0; 
+    font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; 
+}
+
+.redirect-store { 
+    font-size: 2.5rem; font-weight: 900; color: #0f172a; 
+    margin: 0.5rem 0; line-height: 1.1; max-width: 90vw; 
+}
+
+.redirect-subtitle { 
+    font-size: 1rem; color: #94a3b8; margin-top: 1rem; 
+}
+
+@keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes rocketFloat { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+@keyframes pulse { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* =========================================
    LAYOUT PRINCIPAL
    ========================================= */
 .checkout-layout {
@@ -667,7 +815,7 @@ watch(lang, initCountries)
 
 .tabs-container {
   display: flex;
-  background: #e2e8f0;
+  background: #ffffff;
   padding: 4px;
   border-radius: var(--radius-sm);
 }
@@ -680,7 +828,7 @@ watch(lang, initCountries)
   cursor: pointer;
   font-weight: 600;
   font-size: 0.95rem;
-  color: var(--text-light);
+  color: rgb(0, 0, 0);
   transition: all 0.2s ease;
   position: relative;
   margin: 0;

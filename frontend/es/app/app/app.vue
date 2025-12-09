@@ -11,37 +11,77 @@
 </template>
 
 <script setup>
-import { onMounted } from '#imports'
-import { useSitesStore } from '#imports'
+import { onMounted, watch } from '#imports'
+import { useRoute, useRouter } from '#imports'
+import { useSitesStore, useUserStore, usecartStore } from '#imports'
 import { useSedeFromSubdomain } from '#imports'
 import { URI } from './service/conection'
 
 const siteStore = useSitesStore()
+const userStore = useUserStore()
+const cartStore = usecartStore()
 const sede = useSedeFromSubdomain()
+const route = useRoute()
+const router = useRouter()
 
 onMounted(async () => {
-  try {
-    // Por si useSedeFromSubdomain devuelve un ref
-    const currentSede = typeof sede === 'string' ? sede : sede?.value
-    if (!currentSede) return
+  // ---------------------------------------------------------
+  // 1. RECUPERAR ESTADO DEL HASH (SOLO SI EXISTE)
+  // ---------------------------------------------------------
+  const hash = route.query.hash
 
-    const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
+  if (hash) {
+    try {
+      const response = await fetch(`${URI}/data/${hash}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const restoredData = data?.data
+        
+        // Restaurar Usuario
+        if (restoredData.user) {
+          userStore.user = { ...userStore.user, ...restoredData.user }
+        }
 
-    if (!response.ok) {
-      throw new Error(`Error HTTP ${response.status}`)
+        // Restaurar Carrito
+        if (restoredData.cart) {
+          cartStore.cart = restoredData.cart
+        }
+
+        // Opcional: Limpiar el hash de la URL
+        // router.replace({ query: null })
+      }
+    } catch (err) {
+      console.error('Error restaurando datos por hash:', err)
     }
+  }
+  
+  // ¡IMPORTANTE!: Aquí eliminamos el 'return'.
+  // El código sigue bajando para ejecutar la lógica del subdominio.
 
-    const data = await response.json()
+  // ---------------------------------------------------------
+  // 2. SIEMPRE CARGAR SEDE POR SUBDOMINIO
+  // ---------------------------------------------------------
+  try {
+    const currentSede = typeof sede === 'string' ? sede : sede?.value
+    
+    if (currentSede) {
+      const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
 
- 
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status}`)
+      }
 
-    // Guarda la data de la sede en el store
-    siteStore.location.site = data?.[0]
-     
-    siteStore.initStatusWatcher()
+      const data = await response.json()
+
+      // Guarda la data de la sede en el store
+      siteStore.location.site = data?.[0]
+      
+      // Iniciamos el watcher una vez tenemos la sede cargada
+      siteStore.initStatusWatcher()
+    }
   } catch (err) {
     console.error('Error cargando sede desde subdominio:', err)
-    // Aquí podrías lanzar un toast si tienes algo tipo useToast()
   }
 })
 </script>

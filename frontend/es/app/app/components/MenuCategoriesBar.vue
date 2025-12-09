@@ -56,7 +56,7 @@ const categoriesBarTop = computed(() => {
   // Caso B: Usuario arriba o subiendo (Header principal visible)
   // Si está ABIERTO: dejamos espacio para el header (~5rem)
   // Si está CERRADO: dejamos espacio para header + cinta (~8.5rem)
-  return isOpen.value ? '5rem' : '6.0rem'
+  return isOpen.value ? '3.5rem' : '5.7rem'
 })
 
 const formatLabel = (str) => {
