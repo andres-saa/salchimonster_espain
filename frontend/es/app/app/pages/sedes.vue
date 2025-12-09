@@ -16,21 +16,14 @@
         itemscope
         itemtype="https://schema.org/Restaurant"
       >
-        <div class="sede-image-wrapper" :class="{ 'is-loaded': imageLoadedState[sede.site_id] }">
-          
-          <div class="skeleton-loader"></div>
-
-          <img
-            :src="getOptimizedSrc(sede)"
-            :srcset="getSrcSet(sede)"
-            :alt="`Fachada Restaurante Salchimonster ${sede.site_name}`"
-            class="sede-image"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 350px"
-            loading="lazy"
-            decoding="async"
-            @load="onImgLoad(sede.site_id)"
-            @error="onImgError($event)"
-          />
+        <div class="sede-image-wrapper">
+<img
+  :src="getOptimizedSrc(sede)"
+  :alt="`Fachada Restaurante Salchimonster ${sede.site_name}`"
+  class="sede-image"
+  loading="lazy"
+  @error="(e) => onImgError(e, sede)"
+/>
           
           <div class="map-floating-btn" @click.stop>
             <a
@@ -52,7 +45,7 @@
               
               <h3 class="sede-name" itemprop="name">
                 SALCHIMONSTER {{ sede.site_name }}
-              </h3>
+              </h3>  
 
               <address class="sede-address" itemprop="address">
                 {{ sede.site_address }}
@@ -140,28 +133,17 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useHead, useAsyncData, useSitesStore } from '#imports'
 import { URI } from '@/service/conection'
 
-/* ==========================
-   CONFIGURACIÓN Y STORE
-   ========================== */
 const sitesStore = useSitesStore()
 const CACHE_TTL = 30 * 60 * 1000 
 const FALLBACK_IMG = 'https://gestion.salchimonster.com/images/logo.png'
 
-/* ==========================
-   STATE DE UI
-   ========================== */
 const showDialog = ref(false)
 const selectedSede = ref(null)
-// Estado reactivo para controlar el skeleton de cada imagen
-const imageLoadedState = reactive({}) 
 
-/* ==========================
-   FETCH & DATA MANAGEMENT
-   ========================== */
 const {
   data: rawData,
   pending,
@@ -178,9 +160,6 @@ const {
   { server: true, default: () => ({ sites: [], cities: [] }) }
 )
 
-/* ==========================
-   LÓGICA DE CACHÉ / HIDRATACIÓN
-   ========================== */
 if (process.client) {
   const cachedWrapper = sitesStore.getSitesViewCache ? sitesStore.getSitesViewCache() : null
   if (cachedWrapper && cachedWrapper.data && cachedWrapper.timestamp) {
@@ -205,9 +184,6 @@ onBeforeUnmount(() => {
   if (refreshInterval) clearInterval(refreshInterval)
 })
 
-/* ==========================
-   COMPUTED HELPERS
-   ========================== */
 const sedes = computed(() => rawData.value?.sites || [])
 const cities = computed(() => rawData.value?.cities || [])
 
@@ -218,42 +194,41 @@ const filteredSedes = computed(() => {
   )
 })
 
-/* ==========================
-   OPTIMIZACIÓN DE IMÁGENES (VELOCIDAD PURA)
-   ========================== */
+
+/* IMAGENES CON FALLBACK EN CASCADA */
 const getOptimizedSrc = (sede) => {
-  if (!sede.img_id) return FALLBACK_IMG
-  // Calidad media por defecto (600px width)
-  return `${URI}/read-photo-product/${sede.img_id}/600`
+  // Prioridad 1: Si existe img_id, usamos la ruta de foto de producto
+  if (sede.img_id) {
+    return `${URI}/read-photo-product/${sede.img_id}`
+  }
+  // Prioridad 2: Si no hay img_id, intentamos con la ruta basada en site_id
+  return `${URI}/read-product-image/600/site-${sede.site_id}`
 }
 
-const getSrcSet = (sede) => {
-  if (!sede.img_id) return ''
-  // Navegador elige la mejor según el ancho de la tarjeta en pantalla
-  return `
-    ${URI}/read-photo-product/${sede.img_id}/400 400w,
-    ${URI}/read-photo-product/${sede.img_id}/600 600w,
-    ${URI}/read-photo-product/${sede.img_id}/800 800w
-  `
+const onImgError = (event, sede) => {
+  const imgElement = event.target
+  const secondarySrc = `${URI}/read-product-image/600/site-${sede.site_id}`
+  
+  // Verificamos qué URL es la que falló para decidir el siguiente paso
+  
+  // Si la imagen actual YA ES el fallback (logo), no hacemos nada para evitar bucles
+  if (imgElement.src === FALLBACK_IMG) return
+
+  // Si la imagen que falló es la ruta secundaria (la que usa site-{id}), 
+  // significa que ya fallaron las dos opciones. Vamos al logo.
+  if (imgElement.src.includes(`site-${sede.site_id}`)) {
+    imgElement.src = FALLBACK_IMG
+  } 
+  // Si no era la secundaria (significa que falló la img_id), intentamos la secundaria
+  else {
+    imgElement.src = secondarySrc
+  }
 }
 
-const onImgLoad = (siteId) => {
-  imageLoadedState[siteId] = true
-}
+ 
 
-const onImgError = (event) => {
-  // Si falla, limpiar srcset para evitar bucles y poner fallback
-  event.target.removeAttribute('srcset')
-  event.target.src = FALLBACK_IMG
-  // Marcarlo como cargado para quitar el skeleton (aunque sea el fallback)
-  // Usamos el ID de la sede si podemos recuperarlo del contexto, 
-  // o simplemente dejamos el estilo de error visual.
-}
-
-/* ==========================
-   UTILIDADES
-   ========================== */
-const byImgId = (img_id) => `${URI}/read-photo-product/${img_id}`
+/* UTILIDADES */
+const byImgIdentifier = (identifier) => `${URI}/read-photo-product/${identifier}`
 const cityName = (city_id) => cities.value.find(s => s.city_id === city_id)?.city_name ?? ''
 const displayPhone = (raw = '') => raw?.trim() || '—'
 const toE164CO = (raw = '') => {
@@ -270,9 +245,6 @@ const waLink = (sede) => {
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
 }
 
-/* ==========================
-   DIALOG LOGIC
-   ========================== */
 const openSedeDialog = (sede) => {
   selectedSede.value = sede
   showDialog.value = true
@@ -282,20 +254,17 @@ const closeDialog = () => {
   selectedSede.value = null
 }
 
-/* ==========================
-   SEO
-   ========================== */
 useHead(() => {
   const structuredData = filteredSedes.value.map(sede => ({
     "@context": "https://schema.org",
     "@type": "Restaurant",
     "name": `Salchimonster ${sede.site_name}`,
-    "image": sede.img_id ? byImgId(sede.img_id) : FALLBACK_IMG,
+    "image": sede.img_id ? byImgIdentifier(sede.img_id) : FALLBACK_IMG,
     "address": {
       "@type": "PostalAddress",
       "streetAddress": sede.site_address,
       "addressLocality": cityName(sede.city_id),
-      "addressCountry": "ES"
+      "addressCountry": "CO" 
     },
     "telephone": sede.site_phone,
     "url": sede.maps
@@ -312,8 +281,6 @@ useHead(() => {
 <style scoped>
 :root {
   --primary: var(--primary-color);
-  --dark-bg: #1a1a1a;
-  --text-white: #ffffff;
   --overlay-gradient: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%);
 }
 
@@ -342,36 +309,25 @@ useHead(() => {
 .sede-card {
   position: relative; border-radius: 1rem; overflow: hidden; cursor: pointer;
   background-color: #000; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s ease;
+  transition: all 0.5s ease;
 }
 .sede-card:hover { transform: translateY(-8px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6); }
 
-/* IMAGEN & SKELETON */
 .sede-image-wrapper {
   position: relative; width: 100%; aspect-ratio: 3/4; background: #222; overflow: hidden;
 }
 
-/* Skeleton Animation */
-.skeleton-loader {
-  position: absolute; inset: 0; z-index: 1;
-  background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
-  background-size: 200% 100%; animation: shimmer 1.5s infinite;
-  transition: opacity 0.3s;
-}
-
-.sede-image-wrapper.is-loaded .skeleton-loader {
-  opacity: 0; pointer-events: none;
-}
-
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
+/* Imagen Normal CSS */
 .sede-image {
-  width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+  /* Eliminada la opacidad 0 y las transiciones de carga */
+  display: block; 
 }
-.sede-image-wrapper.is-loaded .sede-image { opacity: 1; }
-.sede-card:hover .sede-image { transform: scale(1.05); }
 
-/* Mapa Flotante */
+.sede-card:hover .sede-image { transform: scale(1.05);  }
+
 .map-floating-btn {
   position: absolute; top: 1rem; right: 1rem; z-index: 2;
   background: rgba(255, 255, 255, 0.9); border-radius: 50%; width: 44px; height: 44px;
@@ -381,7 +337,6 @@ useHead(() => {
 .map-floating-btn:hover { background: #fff; transform: scale(1.1); }
 .map-icon { font-size: 1.5rem; color: #333; }
 
-/* Overlay de información */
 .sede-overlay {
   position: absolute; inset: 0;
   background: var(--overlay-gradient, linear-gradient(to top, rgba(0,0,0,0.95), transparent));
@@ -404,7 +359,7 @@ useHead(() => {
 .sede-action-link:hover { background: rgba(37, 211, 102, 0.2); color: #4ade80; }
 .whatsapp-icon { color: #4ade80; font-size: 1.2rem; }
 
-/* Dialog Styles (Igual que antes) */
+/* Dialog Styles */
 .dialog-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px);
   z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1rem;
@@ -435,4 +390,8 @@ useHead(() => {
 .btn-maps:hover { filter: brightness(1.1); }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+*{
+  transition: all ease .3s;
+}
 </style>

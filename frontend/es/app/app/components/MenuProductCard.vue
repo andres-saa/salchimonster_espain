@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { formatoPesosColombianos } from '~/service/utils/formatoPesos'
 const props = defineProps({
   product: { type: Object, required: true },
   categoryId: { type: [Number, String], required: true },
@@ -11,14 +11,13 @@ const props = defineProps({
 
 const emit = defineEmits(['click', 'add-to-cart'])
 const rootEl = ref(null)
-const imgLoaded = ref(false) // Estado para controlar el skeleton
+const imgRef = ref(null) // Referencia directa a la etiqueta img
+const imgLoaded = ref(false)
 
-// === Utils y Computadas Básicas (Sin cambios) ===
+// === Utils y Computadas Básicas ===
 const normalizeSpaces = (str) => String(str || '').replace(/\s*,\s*/g, ', ').replace(/([\p{L}\p{N}])\+([\p{L}\p{N}])/gu, '$1 + $2').replace(/ {2,}/g, ' ').replace(/ \,/g, ',').trim()
 const currentLang = computed(() => (props.lang || 'es').toLowerCase())
-const formatCOP = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(value || 0))
-
-// ... (Mantén tus computadas de displayName, Description, Precios y Tags igual) ...
+ 
 const displayName = computed(() => {
   const p = props.product
   if (currentLang.value === 'es') return normalizeSpaces(p.productogeneral_descripcion || p.product_name || p.productogeneral_descripcionweb || '')
@@ -34,7 +33,8 @@ const truncatedDescription = computed(() => {
   if (!desc) return currentLang.value === 'es' ? 'Sin descripción' : 'No description'
   return desc.length > 100 ? desc.substring(0, 100) + '...' : desc
 })
-// Precios y Tags (Copia tus computadas originales aquí, las omito para no alargar el código innecesariamente)
+
+// Precios y lógica
 const discountAmount = computed(() => Number(props.product.discount_amount || 0))
 const discountPercent = computed(() => Number(props.product.discount_percent || 0))
 const hasDiscount = computed(() => discountAmount.value > 0 && discountPercent.value > 0)
@@ -56,27 +56,19 @@ const isCombo = computed(() => props.product.is_combo != null ? !!props.product.
 const maxFlavor = computed(() => Number(props.product.max_flavor || 0))
 
 
-// === OPTIMIZACIÓN DE IMAGEN (NATIVO) ===
-// Generamos las URLs directamente contra tu backend que es rápido
+// === OPTIMIZACIÓN DE IMAGEN ===
 const imageSrc = computed(() => {
   const p = props.product
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url?.startsWith('http')) return p.image_url
   if (p.image_url) return `${props.imageBaseUrl}/${p.image_url}`
-  
-  // Usamos una calidad media por defecto (400px)
   if (p.img_identifier) return `${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/400`
-  
   return `${props.imageBaseUrl}/placeholder.png`
 })
 
-// Generamos srcset nativo usando tu backend para diferentes tamaños
-// Asumo que si tu backend acepta /400, acepta /200 y /600.
 const imageSrcSet = computed(() => {
   const p = props.product
-  if (!p.img_identifier || p.productogeneral_urlimagen || p.image_url) return '' // No aplica srcset si es URL externa fija
-
-  // Navegador elige la mejor opción automáticamente
+  if (!p.img_identifier || p.productogeneral_urlimagen || p.image_url) return '' 
   return `
     ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/200 200w,
     ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/400 400w,
@@ -84,8 +76,17 @@ const imageSrcSet = computed(() => {
   `
 })
 
+// --- FIX: MANEJO DE ESTADOS DE CARGA ---
+
 const onImgLoad = () => {
   imgLoaded.value = true
+}
+
+// NUEVO: Si da error, quitamos el skeleton y mostramos placeholder
+const onImgError = (event) => {
+  imgLoaded.value = true // Quitamos el skeleton
+  event.target.removeAttribute('srcset') // Evitamos bucles
+  event.target.src = `${props.imageBaseUrl}/placeholder.png` // Fallback
 }
 
 // === Handlers ===
@@ -94,7 +95,19 @@ const handleKeyUp = (event) => { if (event.key === 'Enter') emit('click') }
 
 onMounted(() => {
   if (rootEl.value) props.setProductRef(props.product.id, props.categoryId, rootEl.value)
+  
+  // FIX: Verificamos si la imagen ya estaba en caché al montar
+  if (imgRef.value && imgRef.value.complete) {
+    if (imgRef.value.naturalWidth > 0) {
+        onImgLoad()
+    } else {
+        // Si complete es true pero width es 0, suele ser error
+        // Pero dejamos que el evento @error lo maneje o forzamos loaded
+        imgLoaded.value = true 
+    }
+  }
 })
+
 onBeforeUnmount(() => {
   props.setProductRef(props.product.id, props.categoryId, null)
 })
@@ -111,6 +124,7 @@ onBeforeUnmount(() => {
   >
     <div class="menu-product-card__image-wrapper" :class="{ 'is-loaded': imgLoaded }">
       <img
+        ref="imgRef"
         class="menu-product-card__image"
         :src="imageSrc"
         :srcset="imageSrcSet"
@@ -119,6 +133,7 @@ onBeforeUnmount(() => {
         loading="lazy"
         decoding="async"
         @load="onImgLoad"
+        @error="onImgError"
       />
     </div>
 
@@ -129,10 +144,10 @@ onBeforeUnmount(() => {
       <div class="menu-product-card__footer">
         <div class="menu-product-card__price-block">
           <span v-if="showOriginalPrice" class="menu-product-card__price menu-product-card__price--old">
-            {{ formatCOP(basePrice) }}
+            {{ formatoPesosColombianos(basePrice) }}
           </span>
           <span class="menu-product-card__price">
-            {{ formatCOP(finalPrice) }}
+            {{ formatoPesosColombianos(finalPrice) }}
           </span>
         </div>
 
@@ -153,7 +168,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* ... (Tus estilos base del card se mantienen igual) ... */
 .menu-product-card {
   background: #ffffff;
   border-radius: 0.3rem;
@@ -178,13 +192,13 @@ onBeforeUnmount(() => {
   aspect-ratio: 1 / 1;
   overflow: hidden;
   background: #f3f4f6;
-  /* Shimmer effect por defecto */
+  /* Animación de carga */
   background-image: linear-gradient(90deg, #f3f4f6 0px, #e5e7eb 50%, #f3f4f6 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-/* Cuando JS detecta que cargó, quitamos la animación */
+/* Cuando carga, quitamos fondo y animación */
 .menu-product-card__image-wrapper.is-loaded {
   animation: none;
   background-image: none;
@@ -201,16 +215,17 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   display: block;
-  opacity: 0;
+  /* IMPORTANTE: Iniciamos opacidad en 0 para que no se vea el "corte" de carga */
+  opacity: 0; 
   transition: opacity 0.3s ease-in;
 }
 
-/* La imagen se hace visible solo cuando el wrapper tiene la clase .is-loaded */
+/* Una vez cargado, mostramos la imagen */
 .menu-product-card__image-wrapper.is-loaded .menu-product-card__image {
   opacity: 1;
 }
 
-/* ... (Resto de estilos de textos, precios y tags igual) ... */
+/* Resto de estilos igual... */
 .menu-product-card__body { padding: 0.7rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
 .menu-product-card__name { margin: 0; font-size: 0.95rem; font-weight: 600; color: #111; }
 .menu-product-card__desc { margin: 0; font-size: 0.78rem; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

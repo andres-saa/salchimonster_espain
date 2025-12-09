@@ -10,7 +10,7 @@
       <div v-else-if="error" class="state-container error">
         <span class="icon">⚠️</span>
         <p>Ocurrió un error al cargar la carta.</p>
-        <button @click="refresh" class="retry-btn">Reintentar</button>
+        <button @click="handleRetry" class="retry-btn">Reintentar</button>
       </div>
 
       <div v-else-if="!activeMenu || !activeCards.length" class="state-container empty">
@@ -93,17 +93,28 @@ const zoomedImage = ref(null)
 // Estado reactivo para la carga de CADA imagen individualmente
 const imageStates = reactive({})
 
-// --- FETCH DE DATOS ---
+// --- FETCH DE DATOS (CORREGIDO) ---
 const {
   data: rawMenus,
   pending: loading,
   error,
-  refresh // Asumiendo que useFetch retorna refresh, si no, borrar esto
-} = await useFetch(`${URI}/cartas-all`)
+  refresh
+} = await useFetch(`${URI}/cartas-all`, {
+  lazy: true,        // CRÍTICO: Permite renderizar el componente mientra carga
+  server: false,     // CRÍTICO: Carga solo en cliente (evita bloqueos de servidor)
+  timeout: 15000,    // 15 segundos máximo o lanza error
+  retry: 1           // Intenta 1 vez más automáticamente si falla la red
+})
+
+// Función segura para reintentar manualmente
+const handleRetry = async () => {
+  error.value = null // Limpia el error visualmente
+  await refresh()    // Lanza la petición de nuevo
+}
 
 const menuData = computed(() => rawMenus.value || [])
 
-// --- UTILS DE TEXTO / MATCHING (Tu código original) ---
+// --- UTILS DE TEXTO / MATCHING ---
 const normalize = (s) =>
   String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
 
@@ -135,7 +146,7 @@ const updateWidth = () => {
 const bigUrl = (id) => `${URI}/read-photo-product/${id}`
 const plainUrl = (id) => `${URI}/read-photo-product/${id}`
 
-// --- SELECCIÓN DE MENÚ ACTIVO (Tu lógica exacta) ---
+// --- SELECCIÓN DE MENÚ ACTIVO ---
 const activeMenu = computed(() => {
   if (!menuData.value.length || !carta.value) return null
 
@@ -176,29 +187,28 @@ const activeCards = computed(() => {
   )
 })
 
-// --- MANEJO DE IMÁGENES (Smart Logic) ---
+// --- MANEJO DE IMÁGENES ---
 const onImageLoad = (id) => {
   imageStates[id] = 'loaded'
 }
 
 const onImageError = (event, id) => {
   imageStates[id] = 'error'
-  // Fallback a imagen sin procesar o placeholder
   event.target.src = plainUrl(id) 
 }
 
 // --- ZOOM / LIGHTBOX ---
 const openZoom = (url) => {
   zoomedImage.value = url
-  document.body.style.overflow = 'hidden' // Bloquea scroll
+  document.body.style.overflow = 'hidden'
 }
 
 const closeZoom = () => {
   zoomedImage.value = null
-  document.body.style.overflow = '' // Libera scroll
+  document.body.style.overflow = ''
 }
 
-// --- SCROLL HANDLING (Tu lógica original + debounce) ---
+// --- SCROLL HANDLING ---
 const onScroll = () => {
   if (!isScrolling.value) isScrolling.value = true
   clearTimeout(hideTimer)
@@ -238,15 +248,14 @@ onBeforeUnmount(() => {
 <style scoped>
 /* --- CONFIGURACIÓN DE PÁGINA --- */
 .carta-page {
-  background-color: var(--p-primary-color, #000); /* Fallback negro */
+  background-color: var(--p-primary-color, #ffffff);
   min-height: 120vh;
-  padding-bottom: 80px; /* Espacio para no tapar contenido al final */
+  padding-bottom: 80px;
 }
 
 .carta-body {
   margin: auto;
   width: 100%;
-  max-width: 1400px; /* Limite para pantallas grandes */
 }
 
 /* --- ESTADOS (LOADING / ERROR) --- */
@@ -256,7 +265,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   align-items: center;
   min-height: 300px;
-  color: #fff;
+  color: #fff; /* Asegúrate que contraste con tu fondo */
   gap: 1rem;
   text-align: center;
 }
@@ -265,7 +274,7 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 40px;
   border: 4px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
+  border-top-color: #fff; /* O var(--p-primary-color) si el fondo es oscuro */
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -279,9 +288,10 @@ onBeforeUnmount(() => {
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
+  font-weight: bold;
 }
 
-/* --- GALERÍA DE IMÁGENES MEJORADA --- */
+/* --- GALERÍA DE IMÁGENES --- */
 .image-gallery {
   display: flex;
   flex-direction: column;
@@ -295,35 +305,32 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: #1a1a1a; /* Fondo oscuro mientras carga */
+  background: #1a1a1a;
   cursor: zoom-in;
-  /* Min-height previene colapso total, se ajusta según horizontal/vertical */
   min-height: 200px; 
 }
 
-/* Ajustes de relación de aspecto según layout */
 .image-wrapper.vertical-layout {
-  aspect-ratio: 9/16; /* Típico formato historia/celular */
+  aspect-ratio: 9/16;
 }
 .image-wrapper.horizontal-layout {
-  aspect-ratio: 16/9; /* Típico formato pantalla ancha */
+  aspect-ratio: 16/9;
 }
 
 .main-image {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain; /* O cover, según prefieras */
+  object-fit: contain;
   opacity: 0;
   transition: opacity 0.5s ease;
 }
 
-/* Cuando la imagen carga (clase agregada por JS) */
 .image-wrapper.is-loaded .main-image {
   opacity: 1;
 }
 
-/* Skeleton Loader (Animación de carga) */
+/* Skeleton Loader */
 .skeleton-loader {
   position: absolute;
   inset: 0;
@@ -338,7 +345,7 @@ onBeforeUnmount(() => {
   100% { background-position: -200% 0; }
 }
 
-/* Lupa indicadora */
+/* Lupa */
 .zoom-hint {
   position: absolute;
   bottom: 10px;
@@ -391,27 +398,23 @@ onBeforeUnmount(() => {
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-/* --- BOTÓN PROMO (FAB - Diseño Neon) --- */
+/* --- BOTÓN PROMO (FAB) --- */
 .promo-fab {
   position: fixed;
   right: 15px;
-  bottom: 50%; /* Manteniendo tu posición original */
+  bottom: 50%;
   width: 90px;
   height: 90px;
   z-index: 9999;
-  
   display: flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
   border-radius: 50%;
-  
-  /* Transiciones para ocultar */
   transform: translateX(0);
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
 }
 
-/* Estado oculto al hacer scroll */
 .promo-fab.is-hidden {
   transform: translateX(150%) scale(0.8);
   opacity: 0.2;
@@ -427,7 +430,7 @@ onBeforeUnmount(() => {
   background: rgba(0,0,0,0.5);
   border: 2px solid rgba(255,255,255,0.2);
   z-index: 2;
-  display: flex; /* Centrar imagen */
+  display: flex;
   justify-content: center;
   align-items: center;
 }
@@ -443,7 +446,6 @@ onBeforeUnmount(() => {
   transform: scale(1.1);
 }
 
-/* Anillo de Neón */
 .glow-ring {
   position: absolute;
   top: -5px; left: -5px; right: -5px; bottom: -5px;

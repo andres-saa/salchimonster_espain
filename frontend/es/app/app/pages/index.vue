@@ -10,7 +10,12 @@
     />
 
     <div class="menu-background">
-      <div class="menu-content">
+      <div v-if="showLoader" class="loading-container">
+        <div class="spinner"></div>
+        <p class="loading-text">Cargando nuestro menú...</p>
+      </div>
+
+      <div v-else class="menu-content">
         <section
           v-for="(cat, index) in categories"
           :key="cat.category_id"
@@ -73,7 +78,6 @@ const menuStore = useMenuStore()
 /* ==========================
    CONFIGURACIÓN DE CACHÉ
    ========================== */
-// 30 minutos
 const CACHE_TTL = 30 * 60 * 1000
 
 /* ==========================
@@ -114,7 +118,6 @@ const {
   }
 )
 
-// En cliente: revisar caché de Pinia
 if (process.client) {
   const cachedWrapper = menuStore.getMenuBySite(siteId.value)
 
@@ -123,7 +126,6 @@ if (process.client) {
     const age = now - cachedWrapper.timestamp
 
     if (age < CACHE_TTL) {
-      // CACHÉ FRESCA
       console.log(
         `[Menu] Usando caché fresca (Edad: ${Math.round(age / 1000)}s)`
       )
@@ -139,7 +141,6 @@ if (process.client) {
    ========================== */
 const sourceData = computed(() => rawCategoriesData.value)
 
-// Guardar en store cuando llega data válida
 watch(
   rawCategoriesData,
   (val) => {
@@ -215,6 +216,14 @@ const categories = computed(() => {
 })
 
 /* ==========================
+   ESTADO DE CARGA (NUEVO)
+   ========================== */
+// Mostramos loader si está pendiente Y no tenemos categorías previas (evita parpadeo si hay caché)
+const showLoader = computed(() => {
+  return menuPending.value && categories.value.length === 0
+})
+
+/* ==========================
    NAVEGACIÓN DE PRODUCTOS
    ========================== */
 const onClickProduct = (category, product) => {
@@ -237,7 +246,6 @@ let programmaticScrollTimer = null
 onMounted(async () => {
   if (!process.client) return
 
-  // 1. Observer para animación
   productObserver.value = new IntersectionObserver(
     (entries, obs) => {
       entries.forEach((entry) => {
@@ -253,7 +261,6 @@ onMounted(async () => {
     { rootMargin: '0px 0px -10% 0px', threshold: 0.1 }
   )
 
-  // 2. Scroll spy
   productCategoryObserver.value = new IntersectionObserver(
     (entries) => {
       if (isProgrammaticScroll.value) return
@@ -277,23 +284,24 @@ onMounted(async () => {
     { rootMargin: '-120px 0px -60% 0px', threshold: 0.3 }
   )
 
-  // Observar refs ya existentes
-  nextTick(() => {
-    Object.values(productRefs.value).forEach((el) => {
-      if (!el) return
-      el.classList.add('menu-product-card--hidden')
-      if (productObserver.value) productObserver.value.observe(el)
-      if (productCategoryObserver.value) productCategoryObserver.value.observe(el)
-    })
-  })
+  // Nota: Observamos en un watcher o nextTick cuando carguen las categorías, 
+  // ya que al inicio showLoader puede ser true y no hay elementos DOM aún.
 
-  // 3. Refresco inmediato al montar (versión más nueva del backend)
   await doClientRefresh(refresh)
 
-  // 4. Intervalo de actualización (cada 10 min)
   clientRefreshIntervalId = window.setInterval(() => {
     doClientRefresh(refresh)
   }, 10 * 60 * 1000)
+})
+
+// Watch para reconectar observers cuando el loader desaparece y hay contenido
+watch(showLoader, (isLoading) => {
+    if (!isLoading) {
+        nextTick(() => {
+             // Re-verificar refs si es necesario o simplemente dejar que el v-for lo maneje
+             // La lógica de setProductRef se encarga de conectar el observer
+        })
+    }
 })
 
 onBeforeUnmount(() => {
@@ -508,5 +516,38 @@ useHead(() => ({
     url('https://backend.salchimonster.com/read-photo-product/Ym5HMDik');
   background-repeat: no-repeat;
   background-size: 100%;
+}
+
+/* ====================================
+   ESTILOS DEL LOADING (NUEVO)
+   ==================================== */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 60vh; /* Altura suficiente para centrarlo visualmente */
+  width: 100%;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #ffaa00; /* Color naranja Salchimonster */
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 1rem;
+}
+
+.loading-text {
+  color: white;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
