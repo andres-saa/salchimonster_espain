@@ -1,99 +1,117 @@
 <template>
   <div class="carta-page">
+    
     <div class="carta-body">
-      <!-- Indicador de carga -->
-      <div v-if="loading" class="loading">
-        <p>Cargando imágenes...</p>
+
+      <div v-if="loading" class="state-container loading">
+        <div class="spinner"></div>
+        <p>Cargando menú de Colombia...</p>
       </div>
 
-      <!-- Error al cargar -->
-      <div v-else-if="error" class="no-images">
-        <p>Ocurrió un error al cargar la carta.</p>
+      <div v-else-if="error" class="state-container error">
+        <span class="icon">⚠️</span>
+        <p>No pudimos cargar la carta.</p>
+        <button @click="handleRetry" class="retry-btn">Reintentar</button>
       </div>
 
-      <!-- Mensaje si no hay imágenes / menú activo -->
-      <div
-        v-else-if="!activeMenu || !activeCards.length"
-        class="no-images"
-      >
-        <p>No hay imágenes en la carta.</p>
+      <div v-else-if="!activeMenu || !activeCards.length" class="state-container empty">
+        <span class="icon">🇨🇴</span>
+        <p>La carta de Colombia no está disponible en este momento.</p>
       </div>
 
-      <!-- Contenedor de imágenes (usa cartas-all) -->
       <div v-else class="image-gallery">
-        <img
-          v-for="card in activeCards"
+        <div 
+          v-for="card in activeCards" 
           :key="card.id"
-          :src="bigUrl(card.img_identifier)"
-          :alt="`Menú ${activeMenu.name}`"
-          :class="{ 'horizontal-image': !isMobile, 'vertical-image': isMobile }"
-          @error="e => (e.target.src = plainUrl(card.img_identifier))"
-        />
+          class="image-wrapper"
+          :class="{ 
+            'is-loaded': imageStates[card.id] === 'loaded',
+            'horizontal-layout': isHorizontalLayout,
+            'vertical-layout': !isHorizontalLayout
+          }"
+          @click="openZoom(bigUrl(card.img_identifier))"
+        >
+          <div v-if="imageStates[card.id] !== 'loaded'" class="skeleton-loader"></div>
+
+          <img
+            :src="bigUrl(card.img_identifier)"
+            :alt="`Menú Colombia`"
+            class="main-image"
+            loading="lazy"
+            @load="onImageLoad(card.id)"
+            @error="onImageError($event, card.id)"
+          />
+        </div>
       </div>
+    
     </div>
 
-    <!-- Botón Promos: redondo, FIXED y que se esconde al hacer scroll -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="zoomedImage" class="lightbox-overlay" @click="closeZoom">
+          <button class="close-btn">&times;</button>
+          <img :src="zoomedImage" class="lightbox-image" @click.stop />
+        </div>
+      </Transition>
+    </Teleport>
+
     <a
       href="https://local.bot.salchimonster.com/ubicacion/1"
-      class="promo-anchor"
+      class="promo-fab"
       :class="{ 'is-hidden': isScrolling }"
       aria-label="Ver promociones"
     >
-      <img
-        class="promo-round"
-        src="https://backend.salchimonster.com/read-photo-product/5Dqs9XtT"
-        alt="Promos"
-      >
+      <div class="glow-ring"></div> 
+      <div class="fab-content">
+        <img
+          class="fab-icon"
+          :src="`${URI}/read-photo-product/5Dqs9XtT`"
+          alt="Promos"
+        >
+      </div>
     </a>
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 
-// URI definida localmente
 const URI = 'https://backend.salchimonster.com'
 
-// País / carta por defecto: COLOMBIA (en español)
-const carta = ref('colombia')
+// --- ESTADOS UI ---
+const windowWidth = ref(1024)
+const isScrolling = ref(false)
+let hideTimer = null
 
-// ===== Fetch de cartas-all =====
+const zoomedImage = ref(null)
+const imageStates = reactive({})
+
+// --- FETCH DATA ---
 const {
-  data: rawMenus,
+  data: rawResponse,
   pending: loading,
-  error
-} = await useFetch(`${URI}/cartas-all`)
+  error,
+  refresh
+} = await useFetch(`${URI}/data/cata-tiendas-sm`, {
+  lazy: true,
+  server: false,
+  timeout: 15000,
+  retry: 1
+})
 
-const menuData = computed(() => rawMenus.value || [])
-
-// ===== Utils de texto / matching =====
-const normalize = (s) =>
-  String(s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // quita tildes
-    .replace(/_/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-const hasAll = (name, ...kw) =>
-  kw.every((k) => normalize(name).includes(normalize(k)))
-
-const itemHasImages = (m) =>
-  Array.isArray(m.cartas) && m.cartas.some((c) => c.img_identifier)
-
-const firstMatch = (patterns) => {
-  for (const kw of patterns) {
-    const hit = menuData.value.find(
-      (m) => hasAll(m.name, ...kw) && itemHasImages(m)
-    )
-    if (hit) return hit
-  }
-  return null
+const handleRetry = async () => {
+  error.value = null
+  await refresh()
 }
 
-// ===== Responsive: horizontal / vertical =====
-const windowWidth = ref(1024)
+// 1. CORRECCIÓN JSON: Acceso profundo a data.data
+const menuData = computed(() => {
+  if (!rawResponse.value) return []
+  return rawResponse.value.data?.data || []
+})
+
+// --- RESPONSIVE & HELPERS ---
 const isMobile = computed(() => windowWidth.value < 600)
 
 const updateWidth = () => {
@@ -101,62 +119,84 @@ const updateWidth = () => {
   windowWidth.value = window.innerWidth
 }
 
-// URLs de imágenes
 const bigUrl = (id) => `${URI}/read-photo-product/${id}`
 const plainUrl = (id) => `${URI}/read-photo-product/${id}`
+const normalize = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
 
-// ===== Selección de menú activo (Colombia en español por defecto) =====
+// --- LÓGICA PRINCIPAL (COLOMBIA) ---
+
+// 2. Encontrar el objeto de datos para Colombia
 const activeMenu = computed(() => {
-  if (!menuData.value.length || !carta.value) return null
-
-  const primary = isMobile.value ? 'vertical' : 'horizontal'
-  const secondary = isMobile.value ? 'horizontal' : 'vertical'
-
-  // Reglas CO (carta Colombia en español)
-  const rulesCol = [
-    [primary, 'colombia', 'espanol'],
-    [secondary, 'colombia', 'espanol'],
-    ['colombia', 'espanol'],
-    // Fallbacks por si los nombres no incluyen "espanol"
-    [primary, 'colombia'],
-    [secondary, 'colombia'],
-    ['colombia']
-  ]
-
-  // Si algún día usas carta.value = 'nj', aquí podrías armar reglasNJ similares
-  return firstMatch(rulesCol)
+  if (!menuData.value.length) return null
+  // Busca ID "colombia" o nombre "Colombia"
+  return menuData.value.find(m => m.id === 'es-general' || normalize(m.name).includes('España')) || null
 })
 
-// Cartas ordenadas por index
+// Variable reactiva para controlar estilos según la orientación elegida
+const isHorizontalLayout = ref(false)
+
+// 3. Obtener imágenes
 const activeCards = computed(() => {
-  if (!activeMenu.value || !Array.isArray(activeMenu.value.cartas)) return []
-  return [...activeMenu.value.cartas].sort(
-    (a, b) => (a.index ?? 0) - (b.index ?? 0)
-  )
+  const menu = activeMenu.value
+  if (!menu || !menu.cartas) return []
+
+  const lang = 'es'
+
+  // Helper para sacar array seguro
+  const getCards = (orientation) => {
+    if (menu.cartas[orientation] && Array.isArray(menu.cartas[orientation][lang])) {
+      return menu.cartas[orientation][lang]
+    }
+    return []
+  }
+
+  const listHorizontal = getCards('horizontal')
+  const listVertical = getCards('vertical')
+
+  // LÓGICA DE PRIORIDAD (Standard):
+  // 1. Si es móvil y hay verticales -> Usar Vertical
+  if (isMobile.value && listVertical.length > 0) {
+    isHorizontalLayout.value = false
+    return listVertical.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+  }
+
+  // 2. Si es Desktop (o móvil sin verticales), probar Horizontal
+  if (listHorizontal.length > 0) {
+    isHorizontalLayout.value = true
+    return listHorizontal.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+  }
+
+  // 3. Fallback final a vertical
+  if (listVertical.length > 0) {
+    isHorizontalLayout.value = false
+    return listVertical.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+  }
+
+  return []
 })
 
-// ===== Ocultar botón durante scroll =====
-const isScrolling = ref(false)
-let hideTimer = null
-
+// --- EVENTOS UI ---
+const onImageLoad = (id) => { imageStates[id] = 'loaded' }
+const onImageError = (event, id) => {
+  imageStates[id] = 'error'
+  if (event.target.src !== plainUrl(id)) event.target.src = plainUrl(id)
+}
+const openZoom = (url) => { zoomedImage.value = url; document.body.style.overflow = 'hidden' }
+const closeZoom = () => { zoomedImage.value = null; document.body.style.overflow = '' }
 const onScroll = () => {
   if (!isScrolling.value) isScrolling.value = true
   clearTimeout(hideTimer)
-  hideTimer = setTimeout(() => {
-    isScrolling.value = false
-  }, 180)
+  hideTimer = setTimeout(() => { isScrolling.value = false }, 180)
 }
 
+// --- LIFECYCLE ---
 onMounted(() => {
-  carta.value = 'colombia' // <- carga Colombia (ES) por defecto
-
   if (typeof window !== 'undefined') {
-    windowWidth.value = window.innerWidth
-    window.addEventListener('resize', updateWidth)
+    updateWidth()
+    window.addEventListener('resize', updateWidth, { passive: true })
     window.addEventListener('scroll', onScroll, { passive: true })
   }
 })
-
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateWidth)
@@ -167,109 +207,101 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 1. RESET Y FONDO BLANCO */
 .carta-page {
-  background-color: var(--p-primary-color);
-  min-height: 120vh;
-}
-
-.carta-body {
-  /* max-width: 1300px; */
-  margin: auto;
-}
-
-/* Galería de imágenes */
-.image-gallery {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-}
-
-.horizontal-image,
-.vertical-image {
+  background-color: #ffffff;
+  min-height: 100vh;
   width: 100%;
   margin: 0;
   padding: 0;
+  padding-bottom: 80px; /* Espacio para el FAB si es necesario */
 }
 
-/* Estados de carga / error */
-.loading,
-.no-images {
+/* 2. CONTENEDOR TOTALMENTE FLUIDO */
+.carta-body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+}
+
+/* 3. GALERÍA SIN ESPACIOS */
+.image-gallery {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-  font-size: 1.2rem;
-  color: #555;
+  flex-direction: column;
+  width: 100%;
+  gap: 0;     /* Pegadas verticalmente */
+  padding: 0; /* Sin relleno lateral */
 }
 
-/* ===== Botón Promos: redondo, FIXED, con animación ===== */
-.promo-anchor {
-  position: fixed;
-  right: 0;
-  bottom: 50%;
-  z-index: 9999;
-  text-decoration: none;
-
-  transform: translateX(0);
-  transition: transform .28s ease, opacity .28s ease, filter .2s ease;
-  will-change: transform, opacity, filter;
-}
-
-.promo-anchor.is-hidden {
-  transform: translateX(120%);
-  opacity: .2;
-  pointer-events: none;
-}
-
-.promo-round {
-  width: 6rem;
-  height: 6rem;
-  border: none;
-  outline: none;
-  cursor: pointer;
+/* 4. WRAPPER SIN BORDES REDONDEADOS */
+.image-wrapper {
   position: relative;
-  color: #fff;
-  display: grid;
-  place-items: center;
-
-  animation: blink 1.1s infinite, pulse .5s ease-in-out infinite;
-  transition: transform .15s ease-out, filter .15s ease-out;
+  width: 100%;
+  display: block;
+  background: #f4f4f4;
+  cursor: zoom-in;
+  /* IMPORTANTE: Reset total de bordes */
+  border-radius: 0 !important; 
+  margin: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
-.promo-round:hover {
-  transform: scale(1.06);
-  filter: brightness(1.08);
+/* 5. IMAGEN OCUPA EL 100% DEL ANCHO */
+.main-image {
+  width: 100%;
+  height: auto; /* Crece hacia abajo según su ratio */
+  display: block;
+  object-fit: contain; /* Se asegura que se vea todo el ancho */
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  border-radius: 0 !important;
+}
+.image-wrapper.is-loaded .main-image { opacity: 1; }
+
+/* Estados */
+.state-container {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 50vh; color: #666; gap: 1rem; text-align: center; padding: 2rem;
+}
+.spinner {
+  width: 40px; height: 40px; border: 4px solid rgba(0,0,0,0.1);
+  border-top-color: #ff0055; border-radius: 50%; animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Lightbox */
+.lightbox-overlay {
+  position: fixed; inset: 0; z-index: 10000; background-color: rgba(0, 0, 0, 0.95);
+  display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px);
+}
+.lightbox-image { max-width: 100vw; max-height: 100vh; object-fit: contain; }
+.close-btn {
+  position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2);
+  border: none; color: white; font-size: 2rem; width: 50px; height: 50px;
+  border-radius: 50%; cursor: pointer; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
 }
 
-.promo-round:active {
-  transform: scale(.98);
+/* FAB */
+.promo-fab {
+  position: fixed; right: 20px; bottom: 30px; width: 70px; height: 70px; z-index: 9000;
+  display: flex; align-items: center; justify-content: center; text-decoration: none;
+  border-radius: 50%; transform: translateX(0); transition: transform 0.3s ease, opacity 0.3s ease;
 }
-
-@media (max-width: 480px) {
-  .promo-round {
-    width: 4.25rem;
-    height: 4.25rem;
-  }
+.promo-fab.is-hidden { transform: translateX(150%); opacity: 0.5; pointer-events: none; }
+.fab-content {
+  position: relative; width: 100%; height: 100%; border-radius: 50%; overflow: hidden;
+  background: white; border: 2px solid white; z-index: 2; display: flex;
+  justify-content: center; align-items: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .promo-round {
-    animation: none;
-  }
+.fab-icon { width: 100%; height: 100%; object-fit: cover; }
+.glow-ring {
+  position: absolute; inset: -5px; border-radius: 50%;
+  background: linear-gradient(45deg, #ff0055, #00ddff, #ff0055);
+  background-size: 400%; z-index: 1; opacity: 0.7; filter: blur(8px);
+  animation: glowing 3s linear infinite;
 }
-
-/* Parpadeo */
-@keyframes blink {
-  0%   { opacity: 1; }
-  50%  { opacity: .8; filter: invert(4); }
-  100% { opacity: 1; }
-}
-
-/* Pulso suave */
-@keyframes pulse {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.03); }
-  100% { transform: scale(1); }
-}
+@keyframes glowing { 0% { background-position: 0 0; } 50% { background-position: 400% 0; } 100% { background-position: 0 0; } }
 </style>

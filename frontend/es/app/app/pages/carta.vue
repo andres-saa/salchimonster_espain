@@ -1,21 +1,22 @@
 <template>
   <div class="carta-page">
+    
     <div class="carta-body">
 
       <div v-if="loading" class="state-container loading">
         <div class="spinner"></div>
-        <p>Cargando sabores...</p>
+        <p>Cargando carta de España...</p>
       </div>
 
       <div v-else-if="error" class="state-container error">
         <span class="icon">⚠️</span>
-        <p>Ocurrió un error al cargar la carta.</p>
+        <p>No pudimos cargar la información.</p>
         <button @click="handleRetry" class="retry-btn">Reintentar</button>
       </div>
 
       <div v-else-if="!activeMenu || !activeCards.length" class="state-container empty">
-        <span class="icon">🍽️</span>
-        <p>No hay imágenes disponibles para esta selección.</p>
+        <span class="icon">🇪🇸</span>
+        <p>Cargando carta de España...</p>
       </div>
 
       <div v-else class="image-gallery">
@@ -23,26 +24,19 @@
           v-for="card in activeCards" 
           :key="card.id"
           class="image-wrapper"
-          :class="{ 
-            'is-loaded': imageStates[card.id] === 'loaded',
-            'horizontal-layout': !isMobile,
-            'vertical-layout': isMobile
-          }"
+          :class="{ 'is-loaded': imageStates[card.id] === 'loaded' }"
           @click="openZoom(bigUrl(card.img_identifier))"
         >
-          
           <div v-if="imageStates[card.id] !== 'loaded'" class="skeleton-loader"></div>
 
           <img
             :src="bigUrl(card.img_identifier)"
-            :alt="`Menú ${activeMenu.name}`"
+            :alt="`Carta España`"
             class="main-image"
             loading="lazy"
             @load="onImageLoad(card.id)"
             @error="onImageError($event, card.id)"
           />
-
-          <div class="zoom-hint" v-if="imageStates[card.id] === 'loaded'">🔍</div>
         </div>
       </div>
     
@@ -61,14 +55,10 @@
       href="https://local.bot.salchimonster.com/ubicacion/1"
       class="promo-fab"
       :class="{ 'is-hidden': isScrolling }"
-      aria-label="Ver promociones"
     >
-      <div class="glow-ring"></div> <div class="fab-content">
-        <img
-          class="fab-icon"
-          src="https://backend.salchimonster.com/read-photo-product/5Dqs9XtT"
-          alt="Promos"
-        >
+      <div class="glow-ring"></div> 
+      <div class="fab-content">
+        <img class="fab-icon" :src="`${URI}/read-photo-product/5Dqs9XtT`" alt="Promos">
       </div>
     </a>
 
@@ -77,397 +67,192 @@
 
 <script setup>
 import { ref, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
-import { URI } from '@/service/conection'
 import { useUserStore } from '@/stores/user'
 
 const user = useUserStore()
+const URI = 'https://backend.salchimonster.com'
 
-// --- ESTADOS GLOBALES ---
-const carta = ref('colombia')
+// --- ESTADOS ---
 const windowWidth = ref(1024)
 const isScrolling = ref(false)
 let hideTimer = null
 
-// Estado para el zoom
 const zoomedImage = ref(null)
-// Estado reactivo para la carga de CADA imagen individualmente
 const imageStates = reactive({})
 
-// --- FETCH DE DATOS (CORREGIDO) ---
+// --- FETCH DATA ---
 const {
-  data: rawMenus,
+  data: rawResponse,
   pending: loading,
   error,
   refresh
-} = await useFetch(`${URI}/cartas-all`, {
-  lazy: true,        // CRÍTICO: Permite renderizar el componente mientra carga
-  server: false,     // CRÍTICO: Carga solo en cliente (evita bloqueos de servidor)
-  timeout: 15000,    // 15 segundos máximo o lanza error
-  retry: 1           // Intenta 1 vez más automáticamente si falla la red
+} = await useFetch(`${URI}/data/cata-tiendas-sm`, {
+  lazy: true, server: false, timeout: 15000, retry: 1
 })
 
-// Función segura para reintentar manualmente
-const handleRetry = async () => {
-  error.value = null // Limpia el error visualmente
-  await refresh()    // Lanza la petición de nuevo
-}
+const handleRetry = async () => { error.value = null; await refresh() }
 
-const menuData = computed(() => rawMenus.value || [])
+// Acceso profundo a data.data
+const menuData = computed(() => rawResponse.value?.data?.data || [])
 
-// --- UTILS DE TEXTO / MATCHING ---
-const normalize = (s) =>
-  String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-
-const hasAll = (name, ...kw) =>
-  kw.every((k) => normalize(name).includes(normalize(k)))
-
-const itemHasImages = (m) =>
-  Array.isArray(m.cartas) && m.cartas.some((c) => c.img_identifier)
-
-const firstMatch = (patterns) => {
-  for (const kw of patterns) {
-    const hit = menuData.value.find(
-      (m) => hasAll(m.name, ...kw) && itemHasImages(m)
-    )
-    if (hit) return hit
-  }
-  return null
-}
-
-// --- RESPONSIVE: HORIZONTAL / VERTICAL ---
+// --- HELPERS ---
 const isMobile = computed(() => windowWidth.value < 600)
-
-const updateWidth = () => {
-  if (typeof window === 'undefined') return
-  windowWidth.value = window.innerWidth
-}
-
-// URLs
+const updateWidth = () => { if (typeof window !== 'undefined') windowWidth.value = window.innerWidth }
 const bigUrl = (id) => `${URI}/read-photo-product/${id}`
 const plainUrl = (id) => `${URI}/read-photo-product/${id}`
+const normalize = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
 
-// --- SELECCIÓN DE MENÚ ACTIVO ---
+// --- LÓGICA ESPAÑA ---
 const activeMenu = computed(() => {
-  if (!menuData.value.length || !carta.value) return null
-
-  const primary = isMobile.value ? 'vertical' : 'horizontal'
-  const secondary = isMobile.value ? 'horizontal' : 'vertical'
-
-  const prefLang = user.lang?.name === 'es' ? 'espanol' : 'ingles'
-  const otherLang = prefLang === 'espanol' ? 'ingles' : 'espanol'
-
-  // Reglas CO
-  const rulesCol = [
-    [primary, 'colombia'],
-    [secondary, 'colombia'],
-    ['colombia']
-  ]
-
-  // Reglas NJ
-  const rulesNJ = [
-    [primary, 'nj', prefLang],
-    [secondary, 'nj', prefLang],
-    [primary, 'nj', otherLang],
-    [secondary, 'nj', otherLang],
-    ['nj']
-  ]
-
-  return firstMatch(
-    carta.value === 'colombia'
-      ? [...rulesCol, ...rulesNJ]
-      : [...rulesNJ, ...rulesCol]
-  )
+  if (!menuData.value.length) return null
+  return menuData.value.find(m => m.id === 'es-general' || normalize(m.name).includes('espana')) || null
 })
 
-// --- CARTAS ACTIVAS ---
 const activeCards = computed(() => {
-  if (!activeMenu.value || !Array.isArray(activeMenu.value.cartas)) return []
-  return [...activeMenu.value.cartas].sort(
-    (a, b) => (a.index ?? 0) - (b.index ?? 0)
-  )
+  const menu = activeMenu.value
+  if (!menu || !menu.cartas) return []
+  const lang = 'es'
+
+  const getCards = (orientation) => {
+    return (menu.cartas[orientation] && Array.isArray(menu.cartas[orientation][lang])) 
+      ? menu.cartas[orientation][lang] 
+      : []
+  }
+
+  const listHorizontal = getCards('horizontal')
+  const listVertical = getCards('vertical')
+
+  // Lógica simplificada: Devuelve lo que encuentre, priorizando vertical en móvil si existe,
+  // pero como en tu JSON vertical está vacío, usará horizontal.
+  if (isMobile.value && listVertical.length > 0) return listVertical
+  if (listHorizontal.length > 0) return listHorizontal
+  if (listVertical.length > 0) return listVertical
+  
+  return []
 })
 
-// --- MANEJO DE IMÁGENES ---
-const onImageLoad = (id) => {
-  imageStates[id] = 'loaded'
-}
-
-const onImageError = (event, id) => {
-  imageStates[id] = 'error'
-  event.target.src = plainUrl(id) 
-}
-
-// --- ZOOM / LIGHTBOX ---
-const openZoom = (url) => {
-  zoomedImage.value = url
-  document.body.style.overflow = 'hidden'
-}
-
-const closeZoom = () => {
-  zoomedImage.value = null
-  document.body.style.overflow = ''
-}
-
-// --- SCROLL HANDLING ---
+// --- UI EVENTOS ---
+const onImageLoad = (id) => { imageStates[id] = 'loaded' }
+const onImageError = (e, id) => { imageStates[id] = 'error'; if (e.target.src !== plainUrl(id)) e.target.src = plainUrl(id) }
+const openZoom = (url) => { zoomedImage.value = url; document.body.style.overflow = 'hidden' }
+const closeZoom = () => { zoomedImage.value = null; document.body.style.overflow = '' }
 const onScroll = () => {
   if (!isScrolling.value) isScrolling.value = true
   clearTimeout(hideTimer)
-  hideTimer = setTimeout(() => {
-    isScrolling.value = false
-  }, 180)
+  hideTimer = setTimeout(() => { isScrolling.value = false }, 180)
 }
 
-// --- LIFECYCLE ---
 onMounted(() => {
-  if (!user.lang?.name) {
-    user.lang = {
-      name: 'es',
-      label: 'Español',
-      flag: 'https://flagcdn.com/w20/co.png'
-    }
+  if (user && (!user.lang?.name || user.lang.name !== 'es')) {
+     if(!user.lang) user.lang = {}
+     user.lang = { name: 'es', label: 'Español', flag: 'https://flagcdn.com/w20/es.png' }
   }
-
-  carta.value = 'colombia'
-
   if (typeof window !== 'undefined') {
-    windowWidth.value = window.innerWidth
+    updateWidth()
     window.addEventListener('resize', updateWidth, { passive: true })
     window.addEventListener('scroll', onScroll, { passive: true })
   }
 })
-
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', updateWidth)
-    window.removeEventListener('scroll', onScroll)
+    window.removeEventListener('resize', updateWidth); window.removeEventListener('scroll', onScroll)
   }
   clearTimeout(hideTimer)
 })
 </script>
 
 <style scoped>
-/* --- CONFIGURACIÓN DE PÁGINA --- */
+/* 1. RESET Y FONDO BLANCO */
 .carta-page {
-  background-color: var(--p-primary-color, #ffffff);
-  min-height: 120vh;
-  padding-bottom: 80px;
-}
-
-.carta-body {
-  margin: auto;
+  background-color: #ffffff;
+  min-height: 100vh;
   width: 100%;
+  margin: 0;
+  padding: 0; /* Sin padding global */
 }
 
-/* --- ESTADOS (LOADING / ERROR) --- */
-.state-container {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  min-height: 300px;
-  color: #fff; /* Asegúrate que contraste con tu fondo */
-  gap: 1rem;
-  text-align: center;
+/* 2. CONTENEDOR TOTALMENTE FLUIDO */
+.carta-body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  max-width: none; /* Quitamos límite de ancho */
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(255,255,255,0.3);
-  border-top-color: #fff; /* O var(--p-primary-color) si el fondo es oscuro */
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.retry-btn {
-  background: #ff0055;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-/* --- GALERÍA DE IMÁGENES --- */
+/* 3. GALERÍA SIN ESPACIOS */
 .image-gallery {
   display: flex;
   flex-direction: column;
-  margin: 0;
-  padding: 0;
+  width: 100%;
+  gap: 0;     /* Pegadas verticalmente */
+  padding: 0; /* Sin relleno lateral */
 }
 
+/* 4. WRAPPER SIN BORDES REDONDEADOS */
 .image-wrapper {
   position: relative;
   width: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  background: #1a1a1a;
+  display: block;
+  background: #f4f4f4;
   cursor: zoom-in;
-  min-height: 200px; 
+  /* IMPORTANTE: */
+  border-radius: 0 !important; 
+  margin: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
-.image-wrapper.vertical-layout {
-  aspect-ratio: 9/16;
-}
-.image-wrapper.horizontal-layout {
-  aspect-ratio: 16/9;
-}
-
+/* 5. IMAGEN OCUPA EL 100% DEL ANCHO */
 .main-image {
   width: 100%;
-  height: 100%;
+  height: auto; /* Mantiene proporción, crece hacia abajo */
   display: block;
-  object-fit: contain;
+  object-fit: contain; /* Asegura que se vea completa a lo ancho */
   opacity: 0;
   transition: opacity 0.5s ease;
+  border-radius: 0 !important; /* Aseguramos cero borde en la img también */
 }
+.image-wrapper.is-loaded .main-image { opacity: 1; }
 
-.image-wrapper.is-loaded .main-image {
-  opacity: 1;
+/* Estados de carga/error (centrados) */
+.state-container {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 50vh; color: #666; gap: 1rem; text-align: center; padding: 2rem;
 }
-
-/* Skeleton Loader */
-.skeleton-loader {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  z-index: 1;
+.spinner {
+  width: 40px; height: 40px; border: 4px solid rgba(0,0,0,0.1);
+  border-top-color: #ff0055; border-radius: 50%; animation: spin 1s linear infinite;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* Lupa */
-.zoom-hint {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  background: rgba(0,0,0,0.6);
-  color: white;
-  padding: 6px;
-  border-radius: 50%;
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
-}
-.image-wrapper:hover .zoom-hint { opacity: 1; }
-
-/* --- LIGHTBOX (ZOOM) --- */
+/* Lightbox y FAB se mantienen igual */
 .lightbox-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background-color: rgba(0, 0, 0, 0.95);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  backdrop-filter: blur(5px);
-  cursor: zoom-out;
+  position: fixed; inset: 0; z-index: 10000; background-color: rgba(0,0,0,0.95);
+  display: flex; justify-content: center; align-items: center;
 }
-
-.lightbox-image {
-  max-width: 95vw;
-  max-height: 95vh;
-  object-fit: contain;
-  box-shadow: 0 0 30px rgba(0,0,0,0.8);
-}
-
+.lightbox-image { max-width: 100vw; max-height: 100vh; object-fit: contain; }
 .close-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background: rgba(255,255,255,0.2);
-  border: none;
-  color: white;
-  font-size: 2rem;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  cursor: pointer;
-  z-index: 10;
+  position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2);
+  border: none; color: white; font-size: 2rem; width: 50px; height: 50px;
+  border-radius: 50%; cursor: pointer; z-index: 11;
+  display: flex; align-items: center; justify-content: center;
 }
-
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-
-/* --- BOTÓN PROMO (FAB) --- */
 .promo-fab {
-  position: fixed;
-  right: 15px;
-  bottom: 50%;
-  width: 90px;
-  height: 90px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  border-radius: 50%;
-  transform: translateX(0);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+  position: fixed; right: 20px; bottom: 30px; width: 60px; height: 60px; z-index: 9000;
+  border-radius: 50%; transition: transform 0.3s ease, opacity 0.3s ease;
 }
-
-.promo-fab.is-hidden {
-  transform: translateX(150%) scale(0.8);
-  opacity: 0.2;
-  pointer-events: none;
-}
-
+.promo-fab.is-hidden { transform: translateX(150%); opacity: 0.5; pointer-events: none; }
 .fab-content {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  overflow: hidden;
-  background: rgba(0,0,0,0.5);
-  border: 2px solid rgba(255,255,255,0.2);
-  z-index: 2;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  position: relative; width: 100%; height: 100%; border-radius: 50%; overflow: hidden;
+  background: white; border: 2px solid white; z-index: 2; display: flex;
+  justify-content: center; align-items: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
-
-.fab-icon {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.2s;
-}
-
-.promo-fab:hover .fab-icon {
-  transform: scale(1.1);
-}
-
+.fab-icon { width: 100%; height: 100%; object-fit: cover; }
 .glow-ring {
-  position: absolute;
-  top: -5px; left: -5px; right: -5px; bottom: -5px;
-  border-radius: 50%;
+  position: absolute; inset: -5px; border-radius: 50%;
   background: linear-gradient(45deg, #ff0055, #00ddff, #ff0055);
-  background-size: 400%;
-  z-index: 1;
-  opacity: 0.7;
-  filter: blur(8px);
+  background-size: 400%; z-index: 1; opacity: 0.7; filter: blur(8px);
   animation: glowing 3s linear infinite;
 }
-
-@keyframes glowing {
-  0% { background-position: 0 0; }
-  50% { background-position: 400% 0; }
-  100% { background-position: 0 0; }
-}
-
-@media (max-width: 480px) {
-  .promo-fab {
-    width: 70px;
-    height: 70px;
-  }
-}
+@keyframes glowing { 0% { background-position: 0 0; } 50% { background-position: 400% 0; } 100% { background-position: 0 0; } }
 </style>
